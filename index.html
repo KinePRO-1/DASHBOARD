@@ -6,6 +6,35 @@
 <title>Control de gastos — Lucía y Juan</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+  import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDK65pQpjde-51hQPCFog_lv2COh9v2e40",
+    authDomain: "dashboard-1844f.firebaseapp.com",
+    projectId: "dashboard-1844f",
+    storageBucket: "dashboard-1844f.firebasestorage.app",
+    messagingSenderId: "517779911078",
+    appId: "1:517779911078:web:0915b61f6c9a9bc4cc9f67"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const DASHBOARD_DOC = doc(db, "dashboards", "jyl");
+
+  window.dbLoadDashboard = async function(){
+    const snap = await getDoc(DASHBOARD_DOC);
+    return snap.exists() ? snap.data() : null;
+  };
+
+  window.dbSaveDashboard = async function(data){
+    await setDoc(DASHBOARD_DOC, { ...data, actualizadoEl: serverTimestamp() });
+    return true;
+  };
+
+  window.dispatchEvent(new Event('firebase-ready'));
+</script>
 <style>
   :root{
     --bg:#f6f8fb;
@@ -65,6 +94,10 @@
   }
   .upload-status.ok{ color:var(--green); }
   .upload-status.err{ color:var(--red); }
+  .cloud-status{ font-size:11px; color:var(--text-3); display:flex; align-items:center; gap:5px; margin-top:3px; justify-content:flex-end; }
+  .cloud-status.ok{ color:var(--green); }
+  .cloud-status.err{ color:var(--red); }
+  .cloud-status.syncing{ color:var(--amber); }
 
   /* ===== Tabs ===== */
   .tabbar{
@@ -227,7 +260,10 @@
       </div>
     </div>
     <div class="top-actions">
-      <span class="upload-status" id="uploadStatus">datos del archivo original</span>
+      <div>
+        <span class="upload-status" id="uploadStatus">datos del archivo original</span>
+        <div class="cloud-status" id="cloudStatus">☁ conectando…</div>
+      </div>
       <button class="upload-btn" onclick="document.getElementById('fileInput').click()">⭱ Cargar Excel actualizado</button>
       <input type="file" id="fileInput" accept=".xlsx,.xls">
     </div>
@@ -419,6 +455,33 @@ function getPersonaColor(fuente){
   if(PERSON_COLOR_MAP[key]) return PERSON_COLOR_MAP[key];
   const idx = INGRESOS.findIndex(f=>f.fuente===fuente);
   return personaColorByIndex(idx>=0 ? idx : 0);
+}
+
+/* ============ SINCRONIZACIÓN CON FIREBASE ============ */
+function waitForFirebase(timeoutMs=6000){
+  return new Promise((resolve,reject)=>{
+    if(window.dbLoadDashboard && window.dbSaveDashboard) return resolve();
+    let done=false;
+    window.addEventListener('firebase-ready', ()=>{ if(!done){ done=true; resolve(); } }, {once:true});
+    setTimeout(()=>{ if(!done){ done=true; reject(new Error('timeout')); } }, timeoutMs);
+  });
+}
+function setCloudStatus(text, cls){
+  const el = document.getElementById('cloudStatus');
+  if(!el) return;
+  el.textContent = text;
+  el.className = 'cloud-status' + (cls ? ' '+cls : '');
+}
+async function syncToCloud(){
+  if(!window.dbSaveDashboard){ setCloudStatus('☁ sin conexión a la base de datos', 'err'); return; }
+  setCloudStatus('☁ sincronizando…', 'syncing');
+  try{
+    await window.dbSaveDashboard({ REGISTRO, INGRESOS, PRESUPUESTO, SUPERMERCADO });
+    setCloudStatus('☁ sincronizado', 'ok');
+  }catch(err){
+    console.error('Error al sincronizar con Firebase', err);
+    setCloudStatus('☁ error al sincronizar: ' + err.message, 'err');
+  }
 }
 
 /* ============ HELPERS ============ */
@@ -620,6 +683,7 @@ function deleteTicket(id){
   if(expandedTicketId===id) expandedTicketId = null;
   if(editingTicketId===id) cancelEditTicket();
   renderSupermercadoTab(); renderResumen(); renderRegistroTab();
+  syncToCloud();
 }
 function toggleTicketExpand(id){ expandedTicketId = expandedTicketId===id ? null : id; renderComprasList(); }
 
@@ -648,6 +712,7 @@ function saveTicket(){
     expandedTicketId = id;
   }
   renderTicketLines(); renderSupermercadoTab(); renderResumen(); renderRegistroTab();
+  syncToCloud();
 }
 
 function renderSupermercadoTab(){
@@ -1009,6 +1074,7 @@ document.getElementById('fileInput').addEventListener('change', function(e){
 
       status.className = 'upload-status ok';
       status.textContent = '✓ actualizado con ' + file.name + ' (' + newRegistro.length + ' movimientos)';
+      syncToCloud();
     } catch(err){
       status.className = 'upload-status err';
       status.textContent = '✗ ' + err.message;
@@ -1018,14 +1084,34 @@ document.getElementById('fileInput').addEventListener('change', function(e){
 });
 
 /* ============ INIT ============ */
-loadMarketData();
-syncMarketToRegistro();
-document.getElementById('ticketDate').value = todayISO();
-populateSelects();
-renderResumen();
-renderRegistroTab();
-renderTicketLines();
-renderSupermercadoTab();
+(async function init(){
+  loadMarketData();
+  syncMarketToRegistro();
+  document.getElementById('ticketDate').value = todayISO();
+
+  try{
+    await waitForFirebase();
+    const cloudData = await window.dbLoadDashboard();
+    if(cloudData){
+      if(Array.isArray(cloudData.REGISTRO)) REGISTRO = cloudData.REGISTRO;
+      if(Array.isArray(cloudData.INGRESOS)) INGRESOS = cloudData.INGRESOS;
+      if(Array.isArray(cloudData.PRESUPUESTO)) PRESUPUESTO = cloudData.PRESUPUESTO;
+      if(Array.isArray(cloudData.SUPERMERCADO)){ SUPERMERCADO = cloudData.SUPERMERCADO; persistMarketData(); }
+      setCloudStatus('☁ sincronizado', 'ok');
+    } else {
+      setCloudStatus('☁ sin datos previos en la nube — se suben con la próxima carga', 'syncing');
+    }
+  }catch(err){
+    console.error('No se pudo conectar con Firebase', err);
+    setCloudStatus('☁ sin conexión a la base de datos (usando copia local)', 'err');
+  }
+
+  populateSelects();
+  renderResumen();
+  renderRegistroTab();
+  renderTicketLines();
+  renderSupermercadoTab();
+})();
 </script>
 </body>
 </html>
