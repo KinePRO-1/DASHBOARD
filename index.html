@@ -842,6 +842,8 @@ Reglas:
 - "precioUnitario": precio por unidad si figura explícito en el ticket; si no figura, usá null.
 - "total": importe de esa línea tal como figura impreso (o cantidad × precio unitario si hay que calcularlo).
 - Los montos pueden estar en formato europeo (1,50 = uno con cincuenta) o argentino ($ 1.500,00 = mil quinientos). Normalizá siempre a un número decimal estándar con punto, ej: 1500.00.
+- Tickets de apps de delivery/pedidos (por ejemplo PedidosYa): algunos productos tienen sub-ítems o variantes anidadas debajo (por ejemplo "Sabores 1/4" con una lista de sabores de helado) que NO tienen precio propio. En esos casos NO los extraigas como líneas separadas: incorporalos entre paréntesis en el "producto" del ítem principal (ej: "Helado 1/4 Kg (Choco Kinder, Super Nutella, Iramontana)"), y usá la cantidad, unidad y precio del ítem principal para esa única línea.
+- Si el ticket es de una app de delivery y no figura el nombre del comercio en el encabezado, usá el nombre de la app/plataforma (ej. "PedidosYa") solo si no hay otro nombre de local más específico.
 - "fecha": normalizala a YYYY-MM-DD si podés deducirla del ticket (formatos frecuentes: dd/mm/aa, dd/mm/aaaa).
 - Si no podés determinar el comercio o la fecha con confianza, usá null en ese campo.
 - Respondé solo con el JSON, nada más.`;
