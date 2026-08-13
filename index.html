@@ -319,6 +319,10 @@
   .btn.icon-btn{ display:flex; align-items:center; justify-content:center; width:34px; height:34px; padding:0; color:var(--blue); border-color:var(--blue-soft); background:var(--blue-soft); flex-shrink:0; }
   .btn.icon-btn:hover{ background:#dbe9fd; }
   .ocr-status{margin-top:8px;font-size:12px;color:var(--text-3);min-height:16px;}
+  .ticket-text-import{margin-top:13px;padding-top:13px;border-top:1px solid var(--border-soft);}
+  .ticket-text-import label{display:block;font-size:11.5px;color:var(--text-2);font-weight:500;margin-bottom:6px;}
+  .ticket-text-import textarea{display:block;width:100%;min-height:118px;resize:vertical;padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font:inherit;font-size:12.5px;line-height:1.45;}
+  .ticket-text-import .hint{margin:6px 0 0;color:var(--text-3);font-size:11.5px;line-height:1.4;}
   .ticket-lines{overflow-x:auto;}
   .ticket-lines table{min-width:680px;}
   .ticket-lines input{width:100%;min-width:62px;padding:7px 8px;border:1px solid var(--border);border-radius:6px;font:inherit;font-size:12.5px;color:var(--text);}
@@ -533,6 +537,12 @@
               </select>
             </div>
             <div class="field" style="grid-column:1/-1;"><label for="ticketNumber">N.º de ticket, opcional</label><input id="ticketNumber" type="text" placeholder="Para evitar cargarlo dos veces"></div>
+          </div>
+          <div class="ticket-text-import">
+            <label for="ticketTextImport">Pegar compra en texto</label>
+            <textarea id="ticketTextImport" placeholder="Pegá la compra con fecha, productos, cantidades, precios y total."></textarea>
+            <p class="hint">Reconoce el formato de compra detallada y completa automáticamente la fecha y los productos del ticket.</p>
+            <div class="ticket-actions" style="margin-top:9px;"><button class="btn" type="button" onclick="importTicketText()">Importar texto</button></div>
           </div>
           <div class="ticket-actions">
             <button class="btn icon-btn" type="button" title="Cargar foto del ticket (se leen los productos automáticamente)" onclick="document.getElementById('ticketPhoto').click()" aria-label="Cargar foto del ticket">
@@ -928,6 +938,55 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>'"]/g, c=>({ '&':'&amp
 function todayISO(){ return new Date().toISOString().slice(0,10); }
 function numInput(v){ return Number(String(v==null?'':v).replace(',','.')) || 0; }
 function moneyInput(v){ const s=String(v==null?'':v).trim(); return Number(s.includes(',') ? s.replace(/\./g,'').replace(',','.') : s) || 0; }
+function parseArDate(value){
+  const m=String(value||'').match(/(\d{1,2})\s*[\/-]\s*(\d{1,2})\s*[\/-]\s*(\d{2,4})/);
+  if(!m) return '';
+  const year=m[3].length===2 ? '20'+m[3] : m[3];
+  const date=new Date(Number(year),Number(m[2])-1,Number(m[1]));
+  return isNaN(date) ? '' : `${year}-${String(Number(m[2])).padStart(2,'0')}-${String(Number(m[1])).padStart(2,'0')}`;
+}
+function currencyFromText(value){
+  const m=String(value||'').match(/\$\s*([\d.]+(?:,\d+)?)/);
+  if(!m) return 0;
+  const raw=m[1];
+  return Number(raw.includes(',') ? raw.replace(/\./g,'').replace(',','.') : raw.replace(/\./g,'')) || 0;
+}
+function parseTicketText(text){
+  const source=String(text||'').replace(/\r/g,'');
+  const fecha=parseArDate(source.match(/compra\s+del\s+([^\n#]+)/i)?.[1]||source);
+  const sections=[...source.matchAll(/(?:^|\n)\s*\d+\.\s+\*\*([^\n*]+?)\*\*\s*([\s\S]*?)(?=\n\s*\d+\.\s+\*\*|\n\s*#{1,3}\s*Total|$)/g)];
+  const items=sections.map(match=>{
+    const producto=match[1].trim();
+    const lines=[...match[2].matchAll(/^\s*\*\s+(.+)$/gm)].map(x=>x[1].trim());
+    const quantityLine=lines.find(line=>/\d\s*(?:g|gr|kg|unidad(?:es)?|un(?:idad)?(?:es)?|u)\b/i.test(line))||'';
+    const priceLine=lines.find(line=>/\$\s*[\d.,]+\s*\/\s*(?:kg|unidad(?:es)?|un(?:idad)?(?:es)?|u)\b/i.test(line))||'';
+    const moneyLines=lines.filter(line=>/\$\s*[\d.,]+/.test(line));
+    const total=currencyFromText(moneyLines[moneyLines.length-1]);
+    const q=quantityLine.match(/([\d.,]+)\s*(kg|g|gr|unidad(?:es)?|un(?:idad)?(?:es)?|u)\b/i);
+    let cantidad=1, unidad='un';
+    if(q){
+      cantidad=numInput(q[1]);
+      const measure=q[2].toLowerCase();
+      if(measure==='g'||measure==='gr'){ cantidad=cantidad/1000; unidad='kg'; }
+      else if(measure==='kg'){ unidad='kg'; }
+    }
+    const precioUnitario=currencyFromText(priceLine)|| (cantidad ? total/cantidad : total);
+    return {producto,cantidad,unidad,precioUnitario,total};
+  }).filter(item=>item.producto&&item.total>0);
+  return {fecha,items,total:currencyFromText(source.match(/#{1,3}\s*Total[\s\S]*?\*\*\s*\$\s*([\d.,]+)/i)?.[0])};
+}
+function importTicketText(){
+  const text=document.getElementById('ticketTextImport').value.trim();
+  if(!text){ alert('Pegá el detalle de la compra antes de importarlo.'); return; }
+  const parsed=parseTicketText(text);
+  if(!parsed.items.length){ alert('No se pudieron reconocer productos con importes. Verificá que cada producto tenga su precio final entre asteriscos.'); return; }
+  if(parsed.fecha) document.getElementById('ticketDate').value=parsed.fecha;
+  ticketDraft=parsed.items.map(item=>({...item,id:ticketRowId()}));
+  renderTicketLines();
+  const calculated=parsed.items.reduce((sum,item)=>sum+item.total,0);
+  const totalNote=parsed.total&&Math.abs(parsed.total-calculated)>1 ? ` El total informado es ${fmt(parsed.total)} y el detalle suma ${fmt(calculated)}.` : '';
+  document.getElementById('ocrStatus').textContent=`Texto importado: ${parsed.items.length} producto${parsed.items.length===1?'':'s'} listo${parsed.items.length===1?'':'s'} para guardar.${totalNote}`;
+}
 function cleanProduct(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\b(kg|gr|g|un|u|x)\b/g,' ').replace(/\s+/g,' ').trim(); }
 function nextOrden(){ let n = Number(localStorage.getItem(MARKET_SEQ_KEY)||'0') + 1; localStorage.setItem(MARKET_SEQ_KEY, String(n)); return n; }
 function loadMarketData(){
@@ -944,7 +1003,7 @@ function removeTicketLine(id){ ticketDraft=ticketDraft.filter(x=>x.id!==id); ren
 function updateTicketLine(id, field, value){ const row=ticketDraft.find(x=>x.id===id); if(!row) return; row[field]=value; if(field==='cantidad'||field==='precioUnitario'){ const q=numInput(row.cantidad); const p=moneyInput(row.precioUnitario); if(q&&p) row.total=Math.round(q*p); } renderTicketLines(); }
 function renderTicketLines(){
   const wrap=document.getElementById('ticketLines');
-  if(!ticketDraft.length){ wrap.innerHTML='<div class="empty-note">Agregá productos manualmente o leé una foto del ticket.</div>'; document.getElementById('ticketDraftTotal').textContent='$0'; return; }
+  if(!ticketDraft.length){ wrap.innerHTML='<div class="empty-note">Agregá productos manualmente, pegá una compra en texto o leé una foto del ticket.</div>'; document.getElementById('ticketDraftTotal').textContent='$0'; return; }
   let total=0, html='<table><thead><tr><th>Producto</th><th>Cant.</th><th>Unidad</th><th>Precio unit.</th><th>Total</th><th></th></tr></thead><tbody>';
   ticketDraft.forEach(r=>{ const rowTotal=moneyInput(r.total) || Math.round(numInput(r.cantidad)*moneyInput(r.precioUnitario)); total+=rowTotal; html+=`<tr><td><input class="product" value="${esc(r.producto)}" onchange="updateTicketLine('${r.id}','producto',this.value)"></td><td><input type="number" min="0" step="0.001" value="${esc(r.cantidad)}" onchange="updateTicketLine('${r.id}','cantidad',this.value)"></td><td><input value="${esc(r.unidad)}" onchange="updateTicketLine('${r.id}','unidad',this.value)"></td><td><input type="number" min="0" step="0.01" value="${esc(r.precioUnitario)}" onchange="updateTicketLine('${r.id}','precioUnitario',this.value)"></td><td class="monto">${fmt(rowTotal)}</td><td><button class="btn danger" type="button" onclick="removeTicketLine('${r.id}')">×</button></td></tr>`; });
   wrap.innerHTML=html+'</tbody></table>'; document.getElementById('ticketDraftTotal').textContent=fmt(total);
@@ -970,6 +1029,7 @@ function startEditTicket(id){
 function cancelEditTicket(){
   editingTicketId = null; ticketDraft = [];
   document.getElementById('ticketNumber').value = '';
+  document.getElementById('ticketTextImport').value = '';
   renderTicketLines();
   document.getElementById('saveTicketBtn').textContent = 'Guardar compra';
   document.getElementById('cancelEditBtn').style.display = 'none';
@@ -1008,7 +1068,7 @@ function saveTicket(){
     const id=ticketRowId(), compra={id, orden: nextOrden(), fecha,comercio,medio,fuente,numero,items};
     SUPERMERCADO.push(compra); persistMarketData();
     items.forEach(i=>REGISTRO.push({fecha:new Date(fecha+'T12:00:00').toISOString(),categoria:'Alimentación',subcategoria:'Supermercado',descripcion:`${comercio}: ${i.producto}`,monto:i.total,medio,fuente,ticketSupermercadoId:id}));
-    ticketDraft=[]; document.getElementById('ticketNumber').value='';
+    ticketDraft=[]; document.getElementById('ticketNumber').value=''; document.getElementById('ticketTextImport').value='';
     document.getElementById('ocrStatus').textContent='Compra guardada: '+items.length+' producto'+(items.length===1?'':'s')+' y '+fmt(items.reduce((s,i)=>s+i.total,0))+' incorporados al gasto global.';
     expandedTicketId = id;
   }
@@ -1115,7 +1175,7 @@ function renderComprasList(){
   document.getElementById('comprasCount').textContent = countLabel + (filterTotal ? ' · ' + filterTotal : '');
 
   if(!list.length){
-    wrap.innerHTML = '<div class="empty-note">' + (storeFilter!=='all' ? 'No hay compras registradas en ese supermercado.' : 'Todavía no hay compras de supermercado registradas. Subí una foto del ticket o cargá los productos manualmente.') + '</div>';
+    wrap.innerHTML = '<div class="empty-note">' + (storeFilter!=='all' ? 'No hay compras registradas en ese supermercado.' : 'Todavía no hay compras de supermercado registradas. Pegá una compra en texto, subí una foto del ticket o cargá los productos manualmente.') + '</div>';
     return;
   }
   const sorted = [...list].sort((a,b)=> (new Date(b.fecha)-new Date(a.fecha)) || ((b.orden||0)-(a.orden||0)));
