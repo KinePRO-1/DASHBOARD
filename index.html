@@ -318,6 +318,9 @@
   .btn.danger{color:var(--red);border-color:#f5c8c5;}
   .btn.icon-btn{ display:flex; align-items:center; justify-content:center; width:34px; height:34px; padding:0; color:var(--blue); border-color:var(--blue-soft); background:var(--blue-soft); flex-shrink:0; }
   .btn.icon-btn:hover{ background:#dbe9fd; }
+  .btn.chatgpt-link{display:inline-flex;align-items:center;gap:7px;text-decoration:none;color:#fff;background:#202123;border-color:#202123;padding:8px 11px;}
+  .btn.chatgpt-link:hover{background:#303134;border-color:#303134;}
+  .chatgpt-mark{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border:1.5px solid currentColor;border-radius:50%;font-size:10px;font-weight:800;line-height:1;}
   .ocr-status{margin-top:8px;font-size:12px;color:var(--text-3);min-height:16px;}
   .ticket-text-import{margin-top:13px;padding-top:13px;border-top:1px solid var(--border-soft);}
   .ticket-text-import label{display:block;font-size:11.5px;color:var(--text-2);font-weight:500;margin-bottom:6px;}
@@ -559,14 +562,11 @@
           <div class="ticket-text-import">
             <label for="ticketTextImport">Pegar compra en texto</label>
             <textarea id="ticketTextImport" placeholder="Pegá la compra con fecha, productos, cantidades, precios y total."></textarea>
-            <p class="hint">Reconoce el formato de compra detallada y completa automáticamente la fecha y los productos del ticket.</p>
+            <p class="hint">Abrí ChatGPT, subí la foto del ticket y pegá acá la respuesta para completar automáticamente la fecha y los productos.</p>
             <div class="ticket-actions" style="margin-top:9px;"><button class="btn" type="button" onclick="importTicketText()">Importar texto</button></div>
           </div>
           <div class="ticket-actions">
-            <button class="btn icon-btn" type="button" title="Cargar foto del ticket (se leen los productos automáticamente)" onclick="document.getElementById('ticketPhoto').click()" aria-label="Cargar foto del ticket">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
-            </button>
-            <input id="ticketPhoto" type="file" accept="image/*" multiple hidden>
+            <a class="btn chatgpt-link" href="https://chatgpt.com/share/6a805333-6dd8-83e9-9844-d635989ec486" target="_blank" rel="noopener" title="Abrir ChatGPT para leer el ticket"><span class="chatgpt-mark">AI</span>ChatGPT</a>
             <button class="btn" type="button" onclick="addTicketLine()">+ Agregar producto</button>
             <button class="btn primary" type="button" id="saveTicketBtn" onclick="saveTicket()">Guardar compra</button>
             <button class="btn" type="button" id="cancelEditBtn" style="display:none;" onclick="cancelEditTicket()">Cancelar edición</button>
@@ -1020,7 +1020,28 @@ function loadMarketData(){
   if(changed) persistMarketData();
 }
 function persistMarketData(){ localStorage.setItem(MARKET_STORAGE_KEY, JSON.stringify(SUPERMERCADO)); }
-function syncMarketToRegistro(){ SUPERMERCADO.forEach(t=>{ if(REGISTRO.some(r=>r.ticketSupermercadoId===t.id)) return; (t.items||[]).forEach(i=>REGISTRO.push({fecha:new Date(t.fecha+'T12:00:00').toISOString(),categoria:'Alimentación',subcategoria:'Supermercado',descripcion:`${t.comercio||'Supermercado'}: ${i.producto}`,monto:Number(i.total)||0,medio:t.medio||'Sin especificar',fuente:t.fuente||'Lucía y Juan',ticketSupermercadoId:t.id})); }); }
+function ticketTotal(ticket){ return (ticket.items||[]).reduce((sum,item)=>sum+Number(item.total||0),0); }
+function dateKey(value){ const raw=String(value||''); if(/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0,10); const date=new Date(value); return isNaN(date)?'':date.toISOString().slice(0,10); }
+function cleanMatch(value){ return String(value||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim(); }
+function ticketRegistroRow(ticket){ return {fecha:new Date(ticket.fecha+'T12:00:00').toISOString(),categoria:'Alimentación',subcategoria:'Supermercado',descripcion:ticket.comercio||'Supermercado',monto:ticketTotal(ticket),medio:ticket.medio||'Sin especificar',fuente:ticket.fuente||'Lucía y Juan',ticketSupermercadoId:ticket.id}; }
+function matchesTicketSummary(row,ticket){
+  const total=ticketTotal(ticket), commerce=cleanMatch(ticket.comercio||'Supermercado');
+  return dateKey(row.fecha)===dateKey(ticket.fecha)
+    && cleanMatch(row.categoria)==='alimentacion'
+    && cleanMatch(row.subcategoria)==='supermercado'
+    && Math.abs(Number(row.monto||0)-total)<0.01
+    && cleanMatch(row.descripcion).includes(commerce)
+    && cleanMatch(row.medio)===cleanMatch(ticket.medio||'Sin especificar')
+    && cleanMatch(row.fuente)===cleanMatch(ticket.fuente||'Lucía y Juan');
+}
+function syncMarketToRegistro(){
+  SUPERMERCADO.forEach(ticket=>{
+    if(REGISTRO.some(row=>row.ticketSupermercadoId===ticket.id)) return;
+    const summary=REGISTRO.find(row=>!row.ticketSupermercadoId && matchesTicketSummary(row,ticket));
+    if(summary){ summary.ticketSupermercadoId=ticket.id; return; }
+    REGISTRO.push(ticketRegistroRow(ticket));
+  });
+}
 function ticketRowId(){ return 't_'+Date.now()+'_'+Math.random().toString(36).slice(2,7); }
 function addTicketLine(line={}){ ticketDraft.push({id:ticketRowId(),producto:line.producto||'',cantidad:line.cantidad||1,unidad:line.unidad||'un',precioUnitario:line.precioUnitario||'',total:line.total||''}); renderTicketLines(); }
 function removeTicketLine(id){ ticketDraft=ticketDraft.filter(x=>x.id!==id); renderTicketLines(); }
@@ -1083,7 +1104,7 @@ function saveTicket(){
     const t = SUPERMERCADO.find(x=>x.id===editingTicketId);
     Object.assign(t, {fecha,comercio,medio,fuente,numero,items});
     REGISTRO = REGISTRO.filter(r=>r.ticketSupermercadoId!==editingTicketId);
-    items.forEach(i=>REGISTRO.push({fecha:new Date(fecha+'T12:00:00').toISOString(),categoria:'Alimentación',subcategoria:'Supermercado',descripcion:`${comercio}: ${i.producto}`,monto:i.total,medio,fuente,ticketSupermercadoId:editingTicketId}));
+    REGISTRO.push(ticketRegistroRow(t));
     persistMarketData();
     document.getElementById('ocrStatus').textContent = 'Compra actualizada: ' + items.length + ' producto' + (items.length===1?'':'s') + ' y ' + fmt(items.reduce((s,i)=>s+i.total,0)) + '.';
     expandedTicketId = editingTicketId;
@@ -1091,9 +1112,9 @@ function saveTicket(){
   } else {
     const id=ticketRowId(), compra={id, orden: nextOrden(), fecha,comercio,medio,fuente,numero,items};
     SUPERMERCADO.push(compra); persistMarketData();
-    items.forEach(i=>REGISTRO.push({fecha:new Date(fecha+'T12:00:00').toISOString(),categoria:'Alimentación',subcategoria:'Supermercado',descripcion:`${comercio}: ${i.producto}`,monto:i.total,medio,fuente,ticketSupermercadoId:id}));
+    REGISTRO.push(ticketRegistroRow(compra));
     ticketDraft=[]; document.getElementById('ticketNumber').value=''; document.getElementById('ticketTextImport').value='';
-    document.getElementById('ocrStatus').textContent='Compra guardada: '+items.length+' producto'+(items.length===1?'':'s')+' y '+fmt(items.reduce((s,i)=>s+i.total,0))+' incorporados al gasto global.';
+    document.getElementById('ocrStatus').textContent='Compra guardada: '+items.length+' producto'+(items.length===1?'':'s')+' y '+fmt(items.reduce((s,i)=>s+i.total,0))+' incorporados al gasto global como una sola compra.';
     expandedTicketId = id;
   }
   renderTicketLines(); renderSupermercadoTab(); renderResumen(); renderRegistroTab();
@@ -1274,94 +1295,6 @@ function renderCompraDetail(t){
   </div>`;
 }
 
-/* ---- Lectura de tickets con IA (Claude, vía API) ---- */
-function fileToBase64(file){
-  return new Promise((resolve,reject)=>{
-    const reader = new FileReader();
-    reader.onload = ()=> resolve(String(reader.result).split(',')[1]);
-    reader.onerror = ()=> reject(new Error('no se pudo leer el archivo de imagen'));
-    reader.readAsDataURL(file);
-  });
-}
-async function readTicketWithAI(file){
-  const base64 = await fileToBase64(file);
-  const media_type = file.type && file.type.startsWith('image/') ? file.type : 'image/jpeg';
-  const prompt = `Sos un lector de tickets de supermercado. Analizá la imagen adjunta y devolvé ÚNICAMENTE un JSON válido (sin texto adicional, sin backticks, sin explicaciones) con esta forma exacta:
-{"comercio": string|null, "fecha": "YYYY-MM-DD"|null, "items": [{"producto": string, "cantidad": number, "unidad": string, "precioUnitario": number|null, "total": number}]}
-
-Reglas:
-- Extraé los productos únicamente de la zona del ticket donde figuran las columnas de Descripción/Cantidad/Importe (o Precio). Ignorá encabezado del comercio, CUIT, código de barras, vendedor, forma de pago, IVA discriminado y leyendas legales.
-- "cantidad": número de unidades o peso comprado. Si no figura, usá 1.
-- "unidad": "un", "kg", "g", "l", etc. según corresponda. Si no está claro, usá "un".
-- "precioUnitario": precio por unidad si figura explícito en el ticket; si no figura, usá null.
-- "total": importe de esa línea tal como figura impreso (o cantidad × precio unitario si hay que calcularlo).
-- Los montos pueden estar en formato europeo (1,50 = uno con cincuenta) o argentino ($ 1.500,00 = mil quinientos). Normalizá siempre a un número decimal estándar con punto, ej: 1500.00.
-- Tickets de apps de delivery/pedidos (por ejemplo PedidosYa): algunos productos tienen sub-ítems o variantes anidadas debajo (por ejemplo "Sabores 1/4" con una lista de sabores de helado) que NO tienen precio propio. En esos casos NO los extraigas como líneas separadas: incorporalos entre paréntesis en el "producto" del ítem principal (ej: "Helado 1/4 Kg (Choco Kinder, Super Nutella, Iramontana)"), y usá la cantidad, unidad y precio del ítem principal para esa única línea.
-- Si el ticket es de una app de delivery y no figura el nombre del comercio en el encabezado, usá el nombre de la app/plataforma (ej. "PedidosYa") solo si no hay otro nombre de local más específico.
-- "fecha": normalizala a YYYY-MM-DD si podés deducirla del ticket (formatos frecuentes: dd/mm/aa, dd/mm/aaaa).
-- Si no podés determinar el comercio o la fecha con confianza, usá null en ese campo.
-- Respondé solo con el JSON, nada más.`;
-
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 2000,
-      messages: [{
-        role: "user",
-        content: [
-          { type: "image", source: { type: "base64", media_type, data: base64 } },
-          { type: "text", text: prompt }
-        ]
-      }]
-    })
-  });
-  if(!response.ok) throw new Error('el servicio de lectura respondió con error (' + response.status + ')');
-  const data = await response.json();
-  const textBlock = (data.content||[]).find(b=>b.type==='text');
-  if(!textBlock || !textBlock.text) throw new Error('no se recibió una respuesta legible');
-  let clean = textBlock.text.trim().replace(/^```json/i,'').replace(/^```/,'').replace(/```$/,'').trim();
-  let parsed;
-  try{ parsed = JSON.parse(clean); }catch(e){ throw new Error('no se pudo interpretar la respuesta del lector'); }
-  return parsed;
-}
-
-document.getElementById('ticketPhoto').addEventListener('change', async function(e){
-  const files = Array.from(e.target.files||[]);
-  if(!files.length) return;
-  const status = document.getElementById('ocrStatus');
-  status.textContent = 'Leyendo el ticket…';
-  try{
-    let allItems = [], comercioDetected=null, fechaDetected=null;
-    for(let idx=0; idx<files.length; idx++){
-      if(files.length>1) status.textContent = 'Leyendo imagen ' + (idx+1) + ' de ' + files.length + '…';
-      const parsed = await readTicketWithAI(files[idx]);
-      if(parsed.comercio && !comercioDetected) comercioDetected = String(parsed.comercio).trim();
-      if(parsed.fecha && !fechaDetected && /^\d{4}-\d{2}-\d{2}$/.test(parsed.fecha)) fechaDetected = parsed.fecha;
-      (parsed.items||[]).forEach(i=>{
-        const producto = String(i.producto||'').trim();
-        if(!producto) return;
-        allItems.push({
-          producto,
-          cantidad: Number(i.cantidad)>0 ? Number(i.cantidad) : 1,
-          unidad: i.unidad ? String(i.unidad).trim() : 'un',
-          precioUnitario: (i.precioUnitario!=null && i.precioUnitario!=='') ? Number(i.precioUnitario) : '',
-          total: Number(i.total)||0
-        });
-      });
-    }
-    if(!allItems.length) throw new Error('no se detectaron productos, cargalos manualmente');
-    ticketDraft = allItems.map(x=>({...x, id: ticketRowId()}));
-    if(comercioDetected && !document.getElementById('ticketStore').value.trim()) document.getElementById('ticketStore').value = comercioDetected;
-    if(fechaDetected) document.getElementById('ticketDate').value = fechaDetected;
-    renderTicketLines();
-    status.textContent = 'Se detectaron ' + allItems.length + ' producto' + (allItems.length===1?'':'s') + '. Revisá nombres, cantidades y precios antes de guardar.';
-  }catch(err){
-    status.textContent = 'No se pudo leer el ticket: ' + err.message;
-  }
-  e.target.value='';
-});
 function filteredRegistroTab(){
   const monthSel = document.getElementById('monthSelect2').value;
   const catSel = document.getElementById('catSelect2').value;
