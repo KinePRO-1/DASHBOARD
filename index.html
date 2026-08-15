@@ -268,6 +268,7 @@
   .registro-subtitle{display:flex;align-items:center;gap:7px;margin:7px 0 0;color:#66718b;font-size:13px;}
   .registro-live-dot{width:10px;height:10px;background:#4ac77a;border-radius:50%;box-shadow:0 0 0 3px #e6f7ec;}
   .registro-filters{display:grid;grid-template-columns:minmax(230px,1.3fr) 200px 260px auto;gap:12px;align-items:center;margin-bottom:23px;}
+  .registro-filters-with-add{grid-template-columns:minmax(220px,1.3fr) 180px 220px auto auto;}
   .registro-filter-control{height:45px;display:flex;align-items:center;gap:11px;padding:0 13px;background:#fff;border:1px solid #dce3ef;border-radius:8px;box-shadow:0 2px 7px rgba(26,53,101,.04);color:#5f6d89;}
   .registro-filter-control svg{flex:0 0 auto;color:#50617f;}
   .registro-filter-control input,.registro-filter-control select{width:100%;min-width:0;height:100%;padding:0;border:0;background:transparent;font:inherit;font-size:13.5px;color:#243454;outline:0;appearance:auto;}
@@ -275,6 +276,7 @@
   .registro-filter-control:focus-within{border-color:#1d68e8;box-shadow:0 0 0 3px #eaf1ff;}
   .registro-control-label{display:none;}
   .registro-action{height:43px;padding:0 16px;border:0;border-radius:7px;background:linear-gradient(135deg,#1769e8,#0758d4);box-shadow:0 4px 10px rgba(23,105,232,.22);color:#fff;font:600 13.5px inherit;white-space:nowrap;cursor:pointer;display:flex;align-items:center;gap:9px;}
+  .registro-add-action{background:linear-gradient(135deg,#168b54,#0e743f);box-shadow:0 4px 10px rgba(18,129,75,.2);}
   .registro-action:hover{filter:brightness(.97);}
   .registro-summary{display:grid;grid-template-columns:minmax(220px,1fr) minmax(220px,1fr) minmax(440px,1.35fr);align-items:stretch;min-height:85px;margin-bottom:16px;background:#fff;border:1px solid #dce3ef;border-radius:8px;box-shadow:0 3px 10px rgba(26,53,101,.05);overflow:hidden;}
   .registro-metric{display:flex;align-items:center;gap:16px;padding:16px 19px;border-right:1px solid #e7ebf2;}
@@ -299,11 +301,12 @@
   .registro-item-icon{width:34px;height:34px;border-radius:50%;display:inline-grid;place-items:center;vertical-align:middle;margin-right:12px;}.registro-item-icon svg{width:17px;height:17px;}.registro-date{white-space:nowrap;}
   .registro-rubro{color:#243967;text-decoration-line:underline;text-decoration-style:dotted;text-underline-offset:4px;}.registro-detail{color:#2d3e60;}.registro-amount{font-weight:700!important;color:#101d3b!important;}
   .payment-pill{display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border-radius:9px;font-size:12px;font-weight:600;white-space:nowrap;}.payment-pill svg{width:15px;height:15px;}.payment-pill.cash{color:#189553;background:#eaf8ef;}.payment-pill.transfer{color:#0765e7;background:#edf4ff;}.payment-pill.other{color:#66718b;background:#f1f3f6;}
-  @media(max-width:980px){.registro-filters{grid-template-columns:1fr 1fr;}.registro-action{justify-content:center;}.registro-summary{grid-template-columns:1fr 1fr;}.registro-payment-tabs{grid-column:1/-1;border-top:1px solid #e7ebf2;}.registro-metric:nth-child(2){border-right:0;}}
+  @media(max-width:980px){.registro-filters,.registro-filters-with-add{grid-template-columns:1fr 1fr;}.registro-action{justify-content:center;}.registro-summary{grid-template-columns:1fr 1fr;}.registro-payment-tabs{grid-column:1/-1;border-top:1px solid #e7ebf2;}.registro-metric:nth-child(2){border-right:0;}}
   @media(max-width:560px){.registro-head{align-items:flex-start;}.registro-title{font-size:22px;}.registro-filters{grid-template-columns:1fr;gap:9px;}.registro-summary{grid-template-columns:1fr;}.registro-metric{border-right:0;border-bottom:1px solid #e7ebf2;padding:14px;}.registro-payment-tabs{padding:11px;}.payment-tab{font-size:11px;padding:0 5px;gap:5px;}.payment-tab svg{width:16px;height:16px;}.registro-table thead th,.registro-table tbody td,.registro-day-row td{padding-left:12px!important;padding-right:12px!important;}}
+  .registro-modal-card{width:min(520px,100%);}
 
   /* ===== Supermercado ===== */
-  .ticket-grid{ display:grid; grid-template-columns:340px 1fr; gap:14px; align-items:start; }
+  .ticket-grid{ display:grid; grid-template-columns:440px minmax(0,1fr); gap:18px; align-items:start; }
   @media(max-width:900px){ .ticket-grid{grid-template-columns:1fr;} }
   .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;min-width:0;}
   .field{display:flex;flex-direction:column;gap:5px;min-width:0;}
@@ -333,6 +336,27 @@
   .comparison-up{color:var(--red);font-weight:600;}.comparison-down{color:var(--green);font-weight:600;}.comparison-same{color:var(--text-3);}.comparison-new{color:var(--blue);}
   .ticket-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;}
   @media(max-width:560px){.ticket-kpis{grid-template-columns:1fr;}.field-grid{grid-template-columns:1fr;}.wrap{padding:0 14px 40px;}.topbar{padding:16px 14px;}.tabbar{padding:0 14px;}.top-actions{width:100%;justify-content:space-between;}.upload-status{text-align:left;}.upload-btn{font-size:12px;padding:8px 10px;}}
+  .ticket-entry-panel{padding:22px 24px!important;border-radius:18px!important;border-color:#dbe3f0!important;box-shadow:0 10px 30px rgba(34,56,103,.09)!important;}
+  .ticket-entry-title{display:flex;align-items:center;gap:12px;margin:0 0 22px!important;font-size:21px!important;color:#0d1b3b!important;}
+  .ticket-title-icon{width:48px;height:48px;display:grid;place-items:center;color:#1769ee;background:linear-gradient(145deg,#edf4ff,#e5efff);border:1px solid #d6e4fc;border-radius:12px;}
+  .ticket-title-icon svg{width:26px;height:26px;}
+  .ticket-entry-panel .field-grid{grid-template-columns:1fr;gap:16px;}
+  .ticket-entry-panel .field{gap:8px;}
+  .ticket-entry-panel .field label,.ticket-text-import label{font-size:14px;font-weight:600;color:#17233f;}
+  .ticket-entry-panel .field input,.ticket-entry-panel .field select{height:54px;border-color:#dbe2ee;border-radius:12px;padding:0 15px;font-size:15px;box-shadow:0 2px 5px rgba(31,52,89,.04);}
+  .ticket-entry-panel .ticket-text-import{margin-top:22px;padding-top:22px;border-color:#e1e6ef;}
+  .ticket-entry-panel .ticket-text-import textarea{min-height:160px;padding:14px;border-radius:12px;border-color:#dbe2ee;font-size:14px;box-shadow:0 2px 5px rgba(31,52,89,.04);}
+  .ticket-entry-panel .ticket-text-import .hint{display:flex;gap:9px;margin-top:12px;font-size:13px;line-height:1.45;color:#7e8ba6;}
+  .ticket-entry-panel .ticket-text-import .hint:before{content:'✦';font-size:22px;color:#2875ef;line-height:.9;}
+  .ticket-entry-panel .ticket-actions{display:grid;grid-template-columns:1fr 1.25fr;gap:10px;margin-top:18px;}
+  .ticket-entry-panel .ticket-actions .btn{height:52px;border-radius:11px;font-size:14px;display:flex;align-items:center;justify-content:center;}
+  .ticket-entry-panel .ticket-actions .btn.primary{grid-column:1/-1;background:linear-gradient(135deg,#2877f4,#195ce0);box-shadow:0 6px 15px rgba(32,104,234,.24);font-size:15px;font-weight:650;}
+  .ticket-entry-panel .ticket-actions #cancelEditBtn{grid-column:1/-1;}
+  .ticket-entry-panel .chatgpt-link{background:linear-gradient(135deg,#313131,#171717);border-color:#202020;}
+  .ticket-entry-panel .ocr-status{font-size:12px;margin-top:12px;}
+  .ticket-products-panel{border-radius:18px!important;border-color:#dbe3f0!important;box-shadow:0 7px 22px rgba(34,56,103,.06)!important;}
+  .ticket-products-panel .panel-title{font-size:16px!important;color:#102043!important;}
+  @media(max-width:560px){.ticket-entry-panel{padding:20px 18px!important;}.ticket-entry-title{font-size:20px!important;}.ticket-grid{gap:14px;}}
 
   /* ===== Compras (tarjetas agrupadas) ===== */
   .compra-card{ border:1px solid var(--border); border-left:4px solid var(--accent,#c9d6ee); border-radius:9px; margin-bottom:10px; overflow:hidden; background:#fff; }
@@ -505,7 +529,7 @@
           <p class="registro-subtitle"><span class="registro-live-dot"></span>Lucía y Juan · planilla en vivo</p>
         </div>
       </div>
-      <div class="registro-filters">
+      <div class="registro-filters registro-filters-with-add">
         <div class="registro-filter-control">
           <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
           <input type="text" id="searchBox" placeholder="Buscar movimiento">
@@ -519,6 +543,7 @@
           <select id="catSelect2" aria-label="Categoría"></select>
         </div>
         <button class="registro-action" type="button" onclick="document.getElementById('fileInput').click()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Actualizar registro</button>
+        <button class="registro-action registro-add-action" type="button" onclick="openRegistroModal()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Nuevo movimiento</button>
       </div>
       <div class="registro-summary">
         <div class="registro-metric">
@@ -544,8 +569,8 @@
     <!-- ===================== SUPERMERCADO ===================== -->
     <div class="tabpanel" id="panel-supermercado">
       <div class="ticket-grid">
-        <div class="panel">
-          <p class="panel-title">Nueva compra</p>
+        <div class="panel ticket-entry-panel">
+          <p class="panel-title ticket-entry-title"><span class="ticket-title-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h2l2.2 11.1a2 2 0 0 0 2 1.6h8.9a2 2 0 0 0 1.9-1.5L21 7H6"></path><circle cx="10" cy="20" r="1"></circle><circle cx="18" cy="20" r="1"></circle></svg></span>Nueva compra</p>
           <div class="field-grid">
             <div class="field"><label for="ticketDate">Fecha</label><input id="ticketDate" type="date"></div>
             <div class="field"><label for="ticketStore">Supermercado</label><input id="ticketStore" type="text" placeholder="Ej. La Anónima"></div>
@@ -557,13 +582,12 @@
                 <option value="Juan">Juan</option>
               </select>
             </div>
-            <div class="field" style="grid-column:1/-1;"><label for="ticketNumber">N.º de ticket, opcional</label><input id="ticketNumber" type="text" placeholder="Para evitar cargarlo dos veces"></div>
+            <div class="field" style="grid-column:1/-1;"><label for="ticketNumber">N.º de ticket</label><input id="ticketNumber" type="text" placeholder="Se detecta al importar; también podés completarlo"></div>
           </div>
           <div class="ticket-text-import">
             <label for="ticketTextImport">Pegar compra en texto</label>
-            <textarea id="ticketTextImport" placeholder="Pegá la compra con fecha, productos, cantidades, precios y total."></textarea>
+            <textarea id="ticketTextImport" onpaste="queueTicketTextImport()" placeholder="Pegá la compra con fecha, productos, cantidades, precios y total."></textarea>
             <p class="hint">Abrí ChatGPT, subí la foto del ticket y pegá acá la respuesta para completar automáticamente la fecha y los productos.</p>
-            <div class="ticket-actions" style="margin-top:9px;"><button class="btn" type="button" onclick="importTicketText()">Importar texto</button></div>
           </div>
           <div class="ticket-actions">
             <a class="btn chatgpt-link" href="https://chatgpt.com/share/6a805333-6dd8-83e9-9844-d635989ec486" target="_blank" rel="noopener" title="Abrir ChatGPT para leer el ticket"><span class="chatgpt-mark">AI</span>ChatGPT</a>
@@ -573,7 +597,7 @@
           </div>
           <div class="ocr-status" id="ocrStatus"></div>
         </div>
-        <div class="panel">
+        <div class="panel ticket-products-panel">
           <p class="panel-title">Productos del ticket <span class="count" id="ticketDraftTotal">$0</span></p>
           <div class="ticket-lines" id="ticketLines"></div>
         </div>
@@ -648,6 +672,22 @@
     </form>
   </div>
 
+  <div class="income-modal" id="registroModal" aria-hidden="true">
+    <form class="income-modal-card registro-modal-card" onsubmit="saveRegistroEntry(event)">
+      <div class="income-modal-head"><h3>Nuevo movimiento</h3><button class="income-modal-close" type="button" onclick="closeRegistroModal()" aria-label="Cerrar">×</button></div>
+      <div class="income-form-grid">
+        <div class="income-form-field"><label for="registroDateInput">Fecha</label><input id="registroDateInput" type="date" required></div>
+        <div class="income-form-field"><label for="registroCategoryInput">Categoría</label><select id="registroCategoryInput" required></select></div>
+        <div class="income-form-field"><label for="registroSubcategoryInput">Rubro</label><input id="registroSubcategoryInput" type="text" required placeholder="Ej. Verdulería / Carnicería"></div>
+        <div class="income-form-field"><label for="registroAmountInput">Importe</label><input id="registroAmountInput" type="number" min="1" step="1" required placeholder="0"></div>
+        <div class="income-form-field full"><label for="registroDetailInput">Detalle</label><input id="registroDetailInput" type="text" required placeholder="Ej. Compra semanal"></div>
+        <div class="income-form-field"><label for="registroMethodInput">Medio de pago</label><select id="registroMethodInput"><option>Efectivo</option><option selected>Transferencia</option><option>Tarjeta</option><option>Otro</option></select></div>
+        <div class="income-form-field"><label for="registroSourceInput">Pagó</label><select id="registroSourceInput"><option value="Lucía y Juan" selected>Compartido (Lucía y Juan)</option><option value="Lucía">Lucía</option><option value="Juan">Juan</option></select></div>
+      </div>
+      <div class="income-form-actions"><button class="income-cancel" type="button" onclick="closeRegistroModal()">Cancelar</button><button class="income-save" type="submit">Guardar movimiento</button></div>
+    </form>
+  </div>
+
   <footer>control de gastos · actualizá el excel y volvé a cargarlo para refrescar todas las pestañas</footer>
 
 <script>
@@ -711,6 +751,31 @@ function getPersonaColor(fuente){
 }
 
 /* ============ SINCRONIZACIÓN CON FIREBASE ============ */
+const SHEETS_SYNC_URL = 'https://script.google.com/macros/s/AKfycbyjpRFtn1ZZqYTmlEJb054qnTtz-nZFXUE7hlX1m8bjSS-iqSm_vL5dUQzv2X1slweJhg/exec';
+const SHEETS_SYNC_KEY = 'JYL_SYNC_2026_15_AGOSTO';
+async function sheetsRequest(action, payload={}){
+  const body={clave:SHEETS_SYNC_KEY,accion:action,...payload};
+  const response=await fetch(SHEETS_SYNC_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify(body)});
+  const data=await response.json();
+  if(!data.ok) throw new Error(data.error||'No se pudo actualizar Google Sheets.');
+  return data;
+}
+async function pullFromSheets(){
+  const url=SHEETS_SYNC_URL+'?accion=leer&clave='+encodeURIComponent(SHEETS_SYNC_KEY);
+  const response=await fetch(url);
+  const data=await response.json();
+  if(!data.ok) throw new Error(data.error||'No se pudo leer Google Sheets.');
+  if(Array.isArray(data.registro)) REGISTRO=data.registro.map(r=>({...r,fecha:r.fecha?new Date(r.fecha+'T12:00:00').toISOString():''}));
+  if(Array.isArray(data.ingresos)) INGRESOS=data.ingresos;
+  syncMarketToRegistro();
+  return data;
+}
+async function saveRegistroToSheets(registro){
+  const data=await sheetsRequest('guardarRegistro',{registro});
+  return data.registro;
+}
+async function deleteRegistroFromSheets(id){ await sheetsRequest('eliminarRegistro',{id}); }
+async function saveIngresoToSheets(ingreso){ return sheetsRequest('guardarIngreso',{ingreso}); }
 function waitForFirebase(timeoutMs=6000){
   return new Promise((resolve,reject)=>{
     if(window.dbLoadDashboard && window.dbSaveDashboard) return resolve();
@@ -997,7 +1062,8 @@ function parseTicketText(text){
     const precioUnitario=currencyFromText(priceLine)|| (cantidad ? total/cantidad : total);
     return {producto,cantidad,unidad,precioUnitario,total};
   }).filter(item=>item.producto&&item.total>0);
-  return {fecha,items,total:currencyFromText(source.match(/#{1,3}\s*Total[\s\S]*?\*\*\s*\$\s*([\d.,]+)/i)?.[0])};
+  const ticketMatch=source.match(/(?:n[.ºo°]?\s*(?:de)?\s*(?:ticket|comprobante)|ticket|comprobante|p\.?v\.?\s*n[.ºo°]?|n[.ºo°]?\s*(?:op|ticket))\s*[:#-]?\s*([a-z0-9][a-z0-9\/-]{2,})/i);
+  return {fecha,items,total:currencyFromText(source.match(/#{1,3}\s*Total[\s\S]*?\*\*\s*\$\s*([\d.,]+)/i)?.[0]),numero:ticketMatch?.[1]||''};
 }
 function importTicketText(){
   const text=document.getElementById('ticketTextImport').value.trim();
@@ -1005,25 +1071,36 @@ function importTicketText(){
   const parsed=parseTicketText(text);
   if(!parsed.items.length){ alert('No se pudieron reconocer productos con importes. Verificá que cada producto tenga su precio final entre asteriscos.'); return; }
   if(parsed.fecha) document.getElementById('ticketDate').value=parsed.fecha;
+  if(parsed.numero) document.getElementById('ticketNumber').value=parsed.numero;
   ticketDraft=parsed.items.map(item=>({...item,id:ticketRowId()}));
   renderTicketLines();
   const calculated=parsed.items.reduce((sum,item)=>sum+item.total,0);
   const totalNote=parsed.total&&Math.abs(parsed.total-calculated)>1 ? ` El total informado es ${fmt(parsed.total)} y el detalle suma ${fmt(calculated)}.` : '';
-  document.getElementById('ocrStatus').textContent=`Texto importado: ${parsed.items.length} producto${parsed.items.length===1?'':'s'} listo${parsed.items.length===1?'':'s'} para guardar.${totalNote}`;
+  const ticketNote=parsed.numero ? ` N.º de ticket detectado: ${parsed.numero}.` : '';
+  document.getElementById('ocrStatus').textContent=`Texto importado: ${parsed.items.length} producto${parsed.items.length===1?'':'s'} listo${parsed.items.length===1?'':'s'} para guardar.${ticketNote}${totalNote}`;
+}
+function queueTicketTextImport(){
+  window.setTimeout(()=>{
+    const text=document.getElementById('ticketTextImport').value.trim();
+    if(text) importTicketText();
+  },0);
 }
 function cleanProduct(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\b(kg|gr|g|un|u|x)\b/g,' ').replace(/\s+/g,' ').trim(); }
 function nextOrden(){ let n = Number(localStorage.getItem(MARKET_SEQ_KEY)||'0') + 1; localStorage.setItem(MARKET_SEQ_KEY, String(n)); return n; }
 function loadMarketData(){
   try{ SUPERMERCADO = JSON.parse(localStorage.getItem(MARKET_STORAGE_KEY)||'[]'); if(!Array.isArray(SUPERMERCADO)) SUPERMERCADO=[]; }catch(e){ SUPERMERCADO=[]; }
   let changed=false;
-  SUPERMERCADO.forEach(t=>{ if(!t.orden){ t.orden=nextOrden(); changed=true; } });
+  SUPERMERCADO.forEach(t=>{ if(!t.orden){ t.orden=nextOrden(); changed=true; } if(!t.huella){ t.huella=ticketFingerprint(t); changed=true; } });
   if(changed) persistMarketData();
 }
 function persistMarketData(){ localStorage.setItem(MARKET_STORAGE_KEY, JSON.stringify(SUPERMERCADO)); }
 function ticketTotal(ticket){ return (ticket.items||[]).reduce((sum,item)=>sum+Number(item.total||0),0); }
 function dateKey(value){ const raw=String(value||''); if(/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0,10); const date=new Date(value); return isNaN(date)?'':date.toISOString().slice(0,10); }
 function cleanMatch(value){ return String(value||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim(); }
-function ticketRegistroRow(ticket){ return {fecha:new Date(ticket.fecha+'T12:00:00').toISOString(),categoria:'Alimentación',subcategoria:'Supermercado',descripcion:ticket.comercio||'Supermercado',monto:ticketTotal(ticket),medio:ticket.medio||'Sin especificar',fuente:ticket.fuente||'Lucía y Juan',ticketSupermercadoId:ticket.id}; }
+function normalizedTicketNumber(value){ return String(value||'').toUpperCase().replace(/[^A-Z0-9]/g,''); }
+function ticketFingerprint(ticket){ const products=(ticket.items||[]).map(item=>`${cleanProduct(item.producto)}:${Number(item.cantidad||0)}:${Number(item.total||0)}`).sort().join('|'); return [dateKey(ticket.fecha),cleanMatch(ticket.comercio),ticketTotal(ticket),cleanMatch(ticket.medio),cleanMatch(ticket.fuente),products].join('~'); }
+function sameTicket(a,b){ const aNumber=normalizedTicketNumber(a.numero), bNumber=normalizedTicketNumber(b.numero); if(aNumber&&bNumber) return aNumber===bNumber && dateKey(a.fecha)===dateKey(b.fecha) && cleanMatch(a.comercio)===cleanMatch(b.comercio); return ticketFingerprint(a)===ticketFingerprint(b); }
+function ticketRegistroRow(ticket){ return {id:'market_'+ticket.id,fecha:new Date(ticket.fecha+'T12:00:00').toISOString(),categoria:'Alimentación',subcategoria:'Supermercado',descripcion:ticket.comercio||'Supermercado',monto:ticketTotal(ticket),medio:ticket.medio||'Sin especificar',fuente:ticket.fuente||'Lucía y Juan',ticketSupermercadoId:ticket.id,ticketNumero:ticket.numero||'',ticketHuella:ticketFingerprint(ticket)}; }
 function matchesTicketSummary(row,ticket){
   const total=ticketTotal(ticket), commerce=cleanMatch(ticket.comercio||'Supermercado');
   return dateKey(row.fecha)===dateKey(ticket.fecha)
@@ -1090,6 +1167,7 @@ function deleteTicket(id){
   if(editingTicketId===id) cancelEditTicket();
   renderSupermercadoTab(); renderResumen(); renderRegistroTab();
   syncToCloud();
+  deleteRegistroFromSheets('market_'+id).catch(err=>{ console.error('No se pudo eliminar el ticket en Google Sheets',err); setCloudStatus('☁ error al actualizar Google Sheets: '+err.message,'err'); });
 }
 function toggleTicketExpand(id){ expandedTicketId = expandedTicketId===id ? null : id; renderComprasList(); }
 
@@ -1098,21 +1176,25 @@ function saveTicket(){
   const items=ticketDraft.map(r=>({producto:r.producto.trim(),cantidad:numInput(r.cantidad),unidad:r.unidad.trim()||'un',precioUnitario:moneyInput(r.precioUnitario),total:moneyInput(r.total)||Math.round(numInput(r.cantidad)*moneyInput(r.precioUnitario))})).filter(r=>r.producto&&r.total>0);
   if(!fecha){ alert('Indicá la fecha de la compra.'); return; }
   if(!items.length){ alert('Cargá al menos un producto con su total.'); return; }
-  if(numero && SUPERMERCADO.some(t=>t.numero && t.numero===numero && t.id!==editingTicketId)){ alert('Ese número de ticket ya fue cargado.'); return; }
+  const candidate={fecha,comercio,medio,fuente,numero,items};
+  const duplicated=SUPERMERCADO.find(t=>t.id!==editingTicketId && sameTicket(t,candidate));
+  if(duplicated){ alert(`Esta compra ya está registrada (${duplicated.numero ? 'N.º '+duplicated.numero : 'misma fecha, comercio, total y productos'}). No se volvió a guardar.`); return; }
 
   if(editingTicketId){
     const t = SUPERMERCADO.find(x=>x.id===editingTicketId);
-    Object.assign(t, {fecha,comercio,medio,fuente,numero,items});
+    Object.assign(t, {fecha,comercio,medio,fuente,numero,items,huella:ticketFingerprint(candidate)});
     REGISTRO = REGISTRO.filter(r=>r.ticketSupermercadoId!==editingTicketId);
     REGISTRO.push(ticketRegistroRow(t));
+    saveRegistroToSheets(ticketRegistroRow(t)).catch(err=>{ console.error('No se pudo actualizar el ticket en Google Sheets',err); setCloudStatus('☁ error al actualizar Google Sheets: '+err.message,'err'); });
     persistMarketData();
     document.getElementById('ocrStatus').textContent = 'Compra actualizada: ' + items.length + ' producto' + (items.length===1?'':'s') + ' y ' + fmt(items.reduce((s,i)=>s+i.total,0)) + '.';
     expandedTicketId = editingTicketId;
     cancelEditTicket();
   } else {
-    const id=ticketRowId(), compra={id, orden: nextOrden(), fecha,comercio,medio,fuente,numero,items};
+    const id=ticketRowId(), compra={id, orden: nextOrden(), fecha,comercio,medio,fuente,numero,items,huella:ticketFingerprint(candidate)};
     SUPERMERCADO.push(compra); persistMarketData();
     REGISTRO.push(ticketRegistroRow(compra));
+    saveRegistroToSheets(ticketRegistroRow(compra)).catch(err=>{ console.error('No se pudo guardar el ticket en Google Sheets',err); setCloudStatus('☁ error al actualizar Google Sheets: '+err.message,'err'); });
     ticketDraft=[]; document.getElementById('ticketNumber').value=''; document.getElementById('ticketTextImport').value='';
     document.getElementById('ocrStatus').textContent='Compra guardada: '+items.length+' producto'+(items.length===1?'':'s')+' y '+fmt(items.reduce((s,i)=>s+i.total,0))+' incorporados al gasto global como una sola compra.';
     expandedTicketId = id;
@@ -1337,6 +1419,37 @@ function registroPaymentPill(medio){
   if(lower.includes('transfer')) return '<span class="payment-pill transfer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h13l-3-3M20 7l-3 3M17 17H4l3 3M4 17l3-3"></path></svg>Transferencia</span>';
   return '<span class="payment-pill other">' + esc(value) + '</span>';
 }
+function openRegistroModal(){
+  const category=document.getElementById('registroCategoryInput');
+  category.innerHTML=CATEGORIAS.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  document.getElementById('registroDateInput').value=todayISO();
+  document.getElementById('registroModal').classList.add('open');
+  document.getElementById('registroModal').setAttribute('aria-hidden','false');
+  document.getElementById('registroSubcategoryInput').focus();
+}
+function closeRegistroModal(){
+  document.getElementById('registroModal').classList.remove('open');
+  document.getElementById('registroModal').setAttribute('aria-hidden','true');
+}
+function saveRegistroEntry(event){
+  event.preventDefault();
+  const fecha=document.getElementById('registroDateInput').value;
+  const categoria=document.getElementById('registroCategoryInput').value;
+  const subcategoria=document.getElementById('registroSubcategoryInput').value.trim();
+  const descripcion=document.getElementById('registroDetailInput').value.trim();
+  const monto=Number(document.getElementById('registroAmountInput').value);
+  const medio=document.getElementById('registroMethodInput').value;
+  const fuente=document.getElementById('registroSourceInput').value;
+  if(!fecha||!categoria||!subcategoria||!descripcion||!Number.isFinite(monto)||monto<=0) return;
+  const exists=REGISTRO.some(r=>dateKey(r.fecha)===fecha&&cleanMatch(r.categoria)===cleanMatch(categoria)&&cleanMatch(r.subcategoria)===cleanMatch(subcategoria)&&cleanMatch(r.descripcion)===cleanMatch(descripcion)&&Number(r.monto)===monto&&cleanMatch(r.medio)===cleanMatch(medio)&&cleanMatch(r.fuente)===cleanMatch(fuente));
+  if(exists){ alert('Ese movimiento ya está registrado.'); return; }
+  const entry={id:ticketRowId(),fecha:new Date(fecha+'T12:00:00').toISOString(),categoria,subcategoria,descripcion,monto,medio,fuente};
+  REGISTRO.push(entry);
+  saveRegistroToSheets(entry).catch(err=>{ console.error('No se pudo guardar el movimiento en Google Sheets',err); setCloudStatus('☁ error al actualizar Google Sheets: '+err.message,'err'); });
+  event.target.reset();
+  closeRegistroModal();
+  renderRegistroTab(); renderResumen(); syncToCloud();
+}
 function renderRegistroTab(){
   const rows = filteredRegistroTab();
   document.getElementById('tableCount').textContent = '(' + rows.length + ')';
@@ -1412,6 +1525,7 @@ function saveIncomeEntry(event){
   let source = INGRESOS.find(f=>normalizeName(f.fuente)===normalizeName(name));
   if(!source){ source={fuente:name,meses:MESES.map(m=>({mes:m,efectivo:0,transferencia:0}))}; INGRESOS.push(source); }
   source.meses[month][method] = (Number(source.meses[month][method])||0) + amount;
+  saveIngresoToSheets({fuente:name,mes:month,medio:method,monto:amount}).catch(err=>{ console.error('No se pudo guardar el ingreso en Google Sheets',err); setCloudStatus('☁ error al actualizar Google Sheets: '+err.message,'err'); });
   closeIncomeModal(); event.target.reset(); renderIngresosTab(); renderResumen(); syncToCloud();
 }
 function renderIngresosTab(){
@@ -1568,6 +1682,24 @@ document.getElementById('fileInput').addEventListener('change', function(e){
     console.error('No se pudo conectar con Firebase', err);
     setCloudStatus('☁ sin conexión a la base de datos (usando copia local)', 'err');
   }
+
+  try{
+    setCloudStatus('☁ leyendo Google Sheets…','syncing');
+    await pullFromSheets();
+    setCloudStatus('☁ Google Sheets sincronizado','ok');
+    syncToCloud();
+  }catch(err){
+    console.error('No se pudo sincronizar Google Sheets',err);
+    setCloudStatus('☁ no se pudo leer Google Sheets: '+err.message,'err');
+  }
+
+  window.setInterval(async()=>{
+    try{
+      await pullFromSheets();
+      populateSelects(); renderResumen(); renderRegistroTab();
+      if(document.getElementById('panel-ingresos').classList.contains('active')) renderIngresosTab();
+    }catch(err){ console.warn('Sincronización periódica de Google Sheets falló',err); }
+  },30000);
 
   populateSelects();
   renderResumen();
