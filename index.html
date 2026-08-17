@@ -409,6 +409,8 @@
 
   <div class="wrap">
 
+    <div id="syncAuditBanner" style="display:none;"></div>
+
     <!-- ===================== RESUMEN ===================== -->
     <div class="tabpanel active" id="panel-resumen">
       <div class="filters filters-cards">
@@ -741,6 +743,8 @@ async function sheetsRequest(action, payload={}){
   if(!data.ok) throw new Error(data.error||'No se pudo actualizar Google Sheets.');
   return data;
 }
+let SYNC_ISSUES = []; // filas de la planilla que NO se pudieron incorporar, con el motivo exacto
+function pushSyncIssue(rawRow, motivo){ SYNC_ISSUES.push({motivo, fila:rawRow}); }
 async function pullFromSheets(){
   const url=SHEETS_SYNC_URL+'?accion=leer&clave='+encodeURIComponent(SHEETS_SYNC_KEY);
   const response=await fetch(url);
@@ -748,8 +752,43 @@ async function pullFromSheets(){
   if(!data.ok) throw new Error(data.error||'No se pudo leer Google Sheets.');
   if(!Array.isArray(data.registro)) throw new Error('Google Sheets devolvió un registro inválido.');
   // Reemplazo completo: nunca se mezclan movimientos nuevos con una copia anterior.
-  REGISTRO=data.registro.map(normalizeRegistroRow).filter(r=>dateKey(r.fecha) && r.monto>0);
+  SYNC_ISSUES=[];
+  AUDIT_LOG.length=0;
+  const auditStartLen=0;
+  const normalized=[];
+  data.registro.forEach(rawRow=>{
+    const preLen=AUDIT_LOG.length;
+    const row=normalizeRegistroRow(rawRow);
+    const key=dateKey(row.fecha);
+    if(!key){
+      pushSyncIssue(rawRow, 'La fecha no se pudo interpretar ("'+String(rawRow?.fecha)+'"). Esta fila no aparece en la app.');
+      return;
+    }
+    if(!(row.monto>0)){
+      pushSyncIssue(rawRow, 'El importe es cero o inválido ("'+String(rawRow?.monto)+'"). Esta fila no aparece en la app.');
+      return;
+    }
+    if(AUDIT_LOG.length>preLen){
+      // esta fila se aceptó, pero pasó por el camino "riesgoso" de interpretación de fecha
+      pushSyncIssue(rawRow, 'Fecha interpretada con el método de respaldo (formato inusual: "'+String(rawRow?.fecha)+'"). Revisá que el día "'+key+'" sea correcto.');
+    }
+    normalized.push(row);
+  });
+  REGISTRO=normalized;
+  renderSyncAuditBanner();
   return data;
+}
+function renderSyncAuditBanner(){
+  const el=document.getElementById('syncAuditBanner');
+  if(!el) return;
+  if(SYNC_ISSUES.length===0){ el.innerHTML=''; el.style.display='none'; return; }
+  el.style.display='block';
+  const items=SYNC_ISSUES.slice(0,25).map(i=>`<li><strong>${esc(i.motivo)}</strong><br><code style="font-size:11px;color:var(--text-3);">${esc(JSON.stringify(i.fila))}</code></li>`).join('');
+  const extra = SYNC_ISSUES.length>25 ? `<li>… y ${SYNC_ISSUES.length-25} fila(s) más.</li>` : '';
+  el.innerHTML = `<div style="background:var(--amber-soft);border:1px solid var(--amber);border-radius:10px;padding:12px 16px;margin:0 0 16px;font-size:13px;color:#7a4d00;">
+    <strong>⚠ Auditoría de sincronización: ${SYNC_ISSUES.length} fila(s) de la planilla no se cargaron o requieren revisión.</strong>
+    <ul style="margin:8px 0 0;padding-left:18px;">${items}${extra}</ul>
+  </div>`;
 }
 async function saveRegistroToSheets(registro){
   const data=await sheetsRequest('guardarRegistro',{registro});
@@ -1055,23 +1094,111 @@ function loadMarketData(){
 }
 function persistMarketData(){ localStorage.setItem(MARKET_STORAGE_KEY, JSON.stringify(SUPERMERCADO)); }
 function ticketTotal(ticket){ return (ticket.items||[]).reduce((sum,item)=>sum+Number(item.total||0),0); }
-function dateKey(value){
-  // Todas las fechas de gastos representan un día calendario, no un instante.
-  // Nunca se usa la zona horaria del navegador para modificar ese día.
-  if(value instanceof Date && !isNaN(value)){
-    // SheetJS crea fechas de Excel en UTC; getDate() las desplaza al huso local.
-    return `${value.getUTCFullYear()}-${String(value.getUTCMonth()+1).padStart(2,'0')}-${String(value.getUTCDate()).padStart(2,'0')}`;
+/* ============================================================
+   MÓDULO DE FECHAS — reescrito desde cero, única fuente de verdad.
+
+   Principio rector: una fecha de gasto es un DÍA CALENDARIO
+   ("5 de agosto"), nunca un instante en el tiempo. El error que
+   veníamos arrastrando ocurría cada vez que, en algún punto del
+   código, una fecha pasaba por un objeto Date y se le pedían sus
+   componentes con métodos de huso horario LOCAL (getDate, getMonth,
+   toLocaleDateString sin fijar el mediodía, etc.). Como Argentina
+   está en UTC-3, ese único paso de más podía correr el día hacia
+   atrás — exactamente el patrón que se ve en las capturas: filas
+   cargadas como "5/8" en la planilla aparecían como "04 ago" en la
+   app.
+
+   Regla de oro aplicada en TODO el archivo a partir de ahora:
+   nunca crear un objeto Date a partir de un valor ambiguo y después
+   leerlo con getUTC-algo o get-algo para "adivinar" el día. En su lugar, se
+   extraen los números de año/mes/día directamente del texto o del
+   objeto de origen, sin pasar por ninguna conversión de huso horario
+   intermedia. Solo como último recurso (formato no reconocido) se
+   admite un fallback basado en Date, y ese fallback queda marcado
+   como "riesgoso" para poder auditarlo (ver AUDIT_LOG más abajo).
+   ============================================================ */
+const AUDIT_LOG = []; // registra cada fecha que no se pudo interpretar con certeza total
+function auditDate(raw, reason){ AUDIT_LOG.push({raw:String(raw), reason, cuando:new Date().toISOString()}); }
+
+const MESES_EN = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+
+// Extrae {y,m,d} de un valor CUALQUIERA sin nunca instanciar un Date
+// para después leerlo en otro huso horario. Devuelve null si no hay
+// forma segura de interpretarlo.
+function extractCalendarParts(value){
+  if(value==null || value==='') return null;
+
+  // 1) Objeto Date ya construido (por ejemplo SheetJS con cellDates:true,
+  //    que SIEMPRE ancla la fecha leída del Excel/Sheets en UTC, nunca en
+  //    el huso del navegador). Por eso acá SÍ corresponde leer con
+  //    getUTC*, porque sabemos con certeza cómo se construyó ese objeto.
+  if(value instanceof Date){
+    if(isNaN(value)) return null;
+    return {y:value.getUTCFullYear(), m:value.getUTCMonth()+1, d:value.getUTCDate(), risky:false};
   }
-  const raw=String(value||'').trim();
-  if(!raw) return '';
-  const iso=raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if(iso) return `${iso[1]}-${String(iso[2]).padStart(2,'0')}-${String(iso[3]).padStart(2,'0')}`;
-  const ar=raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})(?:\s|$)/);
-  if(ar){ const year=ar[3].length===2?'20'+ar[3]:ar[3]; return `${year}-${String(ar[2]).padStart(2,'0')}-${String(ar[1]).padStart(2,'0')}`; }
-  // Google Sheets puede devolver fechas como "Sun Aug 02 2026 ... GMT+0000".
-  // Se toma la fecha UTC para impedir que Argentina la convierta al día anterior.
+
+  // 2) Número de serie de fecha de Excel/Google Sheets (ej: 46247.5)
+  if(typeof value==='number' && Number.isFinite(value)){
+    if(typeof XLSX!=='undefined' && XLSX.SSF && XLSX.SSF.parse_date_code){
+      const d=XLSX.SSF.parse_date_code(value);
+      if(d) return {y:d.y, m:d.m, d:d.d, risky:false};
+    }
+    return null;
+  }
+
+  const raw=String(value).trim();
+  if(!raw) return null;
+
+  // 3) "YYYY-MM-DD" (con o sin hora/zona pegada). Se toman los tres
+  //    números literales del texto: nunca se instancia un Date acá.
+  let m=raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(m) return {y:Number(m[1]), m:Number(m[2]), d:Number(m[3]), risky:false};
+
+  // 4) "DD/MM/AAAA" o "DD-MM-AAAA" (formato argentino, el que usa la
+  //    planilla). También literal, sin pasar por Date.
+  m=raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})(?:[\sT]|$)/);
+  if(m){
+    const day=Number(m[1]), month=Number(m[2]);
+    const year=Number(m[3].length===2 ? '20'+m[3] : m[3]);
+    if(month>=1 && month<=12 && day>=1 && day<=31) return {y:year, m:month, d:day, risky:false};
+  }
+
+  // 5) Formato largo de JS Date.toString(), tal como lo puede devolver
+  //    Google Apps Script al serializar una fecha sin pasar por ISO:
+  //    "Wed Aug 05 2026 00:00:00 GMT-0300 (hora estándar de Argentina)".
+  //    El día/mes/año YA están escritos en el texto tal cual se pensaron:
+  //    se leen directo, sin reconstruir un instante ni convertir huso.
+  m=raw.match(/^\w{3}\s+(\w{3})\s+(\d{1,2})\s+(\d{4})/i);
+  if(m){
+    const month=MESES_EN[m[1].toLowerCase()];
+    if(month) return {y:Number(m[3]), m:month, d:Number(m[2]), risky:false};
+  }
+
+  // 6) "5 de agosto de 2026" u otro texto con nombre de mes en español.
+  const MESES_ES_MAP = {enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,setiembre:9,octubre:10,noviembre:11,diciembre:12};
+  m=raw.match(/^(\d{1,2})\s+de\s+([a-záéíóúñ]+)\s+de\s+(\d{4})/i);
+  if(m){
+    const month=MESES_ES_MAP[normalizedText(m[2])];
+    if(month) return {y:Number(m[3]), m:month, d:Number(m[1]), risky:false};
+  }
+
+  // 7) Último recurso: formato no reconocido. Se delega en el motor de
+  //    JS, pero se lo marca como "riesgoso" y se audita, porque este es
+  //    justo el camino que antes producía corrimientos de un día.
   const date=new Date(raw);
-  return isNaN(date) ? '' : `${date.getUTCFullYear()}-${String(date.getUTCMonth()+1).padStart(2,'0')}-${String(date.getUTCDate()).padStart(2,'0')}`;
+  if(isNaN(date)) return null;
+  auditDate(raw, 'formato no reconocido: se usó new Date() como último recurso');
+  return {y:date.getUTCFullYear(), m:date.getUTCMonth()+1, d:date.getUTCDate(), risky:true};
+}
+
+function dateKey(value){
+  const p=extractCalendarParts(value);
+  if(!p) return '';
+  if(p.y<1900 || p.y>2100 || p.m<1 || p.m>12 || p.d<1 || p.d>31){
+    auditDate(value, 'componentes de fecha fuera de rango');
+    return '';
+  }
+  return `${p.y}-${String(p.m).padStart(2,'0')}-${String(p.d).padStart(2,'0')}`;
 }
 function normalizeFecha(value){ const key=dateKey(value); return key ? key+'T12:00:00' : ''; }
 function registroKey(row){ return [dateKey(row.fecha),cleanMatch(row.categoria),cleanMatch(row.subcategoria),cleanMatch(row.descripcion),Number(row.monto)||0,cleanMatch(row.medio),cleanMatch(row.fuente)].join('|'); }
