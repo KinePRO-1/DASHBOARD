@@ -305,7 +305,18 @@
   .ticket-lines table{min-width:680px;}
   .ticket-lines input{width:100%;min-width:62px;padding:7px 8px;border:1px solid var(--border);border-radius:6px;font:inherit;font-size:12.5px;color:var(--text);}
   .ticket-lines input.product{min-width:180px;}
+  .product-thumb{ display:inline-flex; align-items:center; justify-content:center; border-radius:7px; object-fit:cover; background:var(--border-soft); flex-shrink:0; vertical-align:middle; }
+  .product-thumb-empty{ color:var(--text-3); font-size:14px; }
+  .ticket-lines input.imagen{ min-width:150px; }
+  .catalog-thumb-cell{ display:flex; align-items:center; gap:9px; }
+  .catalog-image-input{ width:100%; min-width:120px; font-size:11.5px !important; padding:5px 7px !important; }
   .comparison-up{color:var(--red);font-weight:600;}.comparison-down{color:var(--green);font-weight:600;}.comparison-same{color:var(--text-3);}.comparison-new{color:var(--blue);}
+  .recommendation{display:flex;flex-direction:column;gap:4px;min-width:190px;}
+  .recommendation-main{color:#0d7441;font-weight:700;line-height:1.3;}
+  .recommendation-detail{color:var(--text-3);font-size:11.5px;line-height:1.35;}
+  .price-history{display:flex;flex-wrap:wrap;gap:5px;}
+  .price-history-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 6px;border-radius:6px;background:#f3f6fb;color:#40506e;font-size:11px;white-space:nowrap;}
+  .price-history-chip.best{background:#e9f8ee;color:#147443;font-weight:700;}
   .ticket-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;}
   @media(max-width:560px){.ticket-kpis{grid-template-columns:1fr;}.field-grid{grid-template-columns:1fr;}.wrap{padding:0 14px 40px;}.topbar{padding:16px 14px;}.tabbar{padding:0 14px;}.top-actions{width:100%;justify-content:space-between;}.upload-status{text-align:left;}.upload-btn{font-size:12px;padding:8px 10px;}}
   .ticket-entry-panel{padding:22px 24px!important;border-radius:18px!important;border-color:#dbe3f0!important;box-shadow:0 10px 30px rgba(34,56,103,.09)!important;}
@@ -1022,7 +1033,9 @@ function openCategoryDetail(category){
 /* ============ SUPERMERCADO ============ */
 const MARKET_STORAGE_KEY = 'jyl_supermercado_v1';
 const MARKET_SEQ_KEY = 'jyl_supermercado_seq_v1';
+const MARKET_IMAGES_KEY = 'jyl_supermercado_imagenes_v1';
 let SUPERMERCADO = [];
+let PRODUCT_IMAGES = {};
 let ticketDraft = [];
 let editingTicketId = null;
 let expandedTicketId = null;
@@ -1092,11 +1105,31 @@ function cleanProduct(s){ return String(s||'').toLowerCase().normalize('NFD').re
 function nextOrden(){ let n = Number(localStorage.getItem(MARKET_SEQ_KEY)||'0') + 1; localStorage.setItem(MARKET_SEQ_KEY, String(n)); return n; }
 function loadMarketData(){
   try{ SUPERMERCADO = JSON.parse(localStorage.getItem(MARKET_STORAGE_KEY)||'[]'); if(!Array.isArray(SUPERMERCADO)) SUPERMERCADO=[]; }catch(e){ SUPERMERCADO=[]; }
+  try{ PRODUCT_IMAGES = JSON.parse(localStorage.getItem(MARKET_IMAGES_KEY)||'{}'); if(!PRODUCT_IMAGES||typeof PRODUCT_IMAGES!=='object') PRODUCT_IMAGES={}; }catch(e){ PRODUCT_IMAGES={}; }
   let changed=false;
   SUPERMERCADO.forEach(t=>{ if(!t.orden){ t.orden=nextOrden(); changed=true; } if(!t.huella){ t.huella=ticketFingerprint(t); changed=true; } });
   if(changed) persistMarketData();
 }
 function persistMarketData(){ localStorage.setItem(MARKET_STORAGE_KEY, JSON.stringify(SUPERMERCADO)); }
+function persistProductImages(){ localStorage.setItem(MARKET_IMAGES_KEY, JSON.stringify(PRODUCT_IMAGES)); }
+function getProductImage(producto){ const key=cleanProduct(producto); return key ? (PRODUCT_IMAGES[key]||'') : ''; }
+function setProductImage(producto, url){
+  const key=cleanProduct(producto);
+  if(!key) return;
+  const clean=String(url||'').trim();
+  if(clean) PRODUCT_IMAGES[key]=clean; else delete PRODUCT_IMAGES[key];
+  persistProductImages();
+}
+function saveCatalogProductImage(input){
+  setProductImage(input.dataset.producto||'',input.value);
+  renderProductCatalog();
+}
+function productThumbHtml(producto, size){
+  const url=getProductImage(producto);
+  const px=size||34;
+  if(url) return `<img src="${esc(url)}" alt="" class="product-thumb" style="width:${px}px;height:${px}px;" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'product-thumb product-thumb-empty',style:'width:${px}px;height:${px}px;',textContent:'✕'}))">`;
+  return `<span class="product-thumb product-thumb-empty" style="width:${px}px;height:${px}px;">🛒</span>`;
+}
 function ticketTotal(ticket){ return (ticket.items||[]).reduce((sum,item)=>sum+Number(item.total||0),0); }
 /* ============================================================
    MÓDULO DE FECHAS — reescrito desde cero, única fuente de verdad.
@@ -1242,18 +1275,63 @@ function syncMarketToRegistro(){
   // se guardan allí antes de entrar al cálculo, evitando duplicados al recargar.
 }
 function ticketRowId(){ return 't_'+Date.now()+'_'+Math.random().toString(36).slice(2,7); }
-function addTicketLine(line={}){ ticketDraft.push({id:ticketRowId(),producto:line.producto||'',cantidad:line.cantidad||1,unidad:line.unidad||'un',precioUnitario:line.precioUnitario||'',total:line.total||''}); renderTicketLines(); }
+function addTicketLine(line={}){ ticketDraft.push({id:ticketRowId(),producto:line.producto||'',cantidad:line.cantidad||1,unidad:line.unidad||'un',precioUnitario:line.precioUnitario||'',total:line.total||'',imagen:line.imagen||''}); renderTicketLines(); }
 function removeTicketLine(id){ ticketDraft=ticketDraft.filter(x=>x.id!==id); renderTicketLines(); }
 function updateTicketLine(id, field, value){ const row=ticketDraft.find(x=>x.id===id); if(!row) return; row[field]=value; if(field==='cantidad'||field==='precioUnitario'){ const q=numInput(row.cantidad); const p=moneyInput(row.precioUnitario); if(q&&p) row.total=Math.round(q*p); } renderTicketLines(); }
 function renderTicketLines(){
   const wrap=document.getElementById('ticketLines');
   if(!ticketDraft.length){ wrap.innerHTML='<div class="empty-note">Agregá productos manualmente, pegá una compra en texto o leé una foto del ticket.</div>'; document.getElementById('ticketDraftTotal').textContent='$0'; return; }
-  let total=0, html='<table><thead><tr><th>Producto</th><th>Cant.</th><th>Unidad</th><th>Precio unit.</th><th>Total</th><th></th></tr></thead><tbody>';
-  ticketDraft.forEach(r=>{ const rowTotal=moneyInput(r.total) || Math.round(numInput(r.cantidad)*moneyInput(r.precioUnitario)); total+=rowTotal; html+=`<tr><td><input class="product" value="${esc(r.producto)}" onchange="updateTicketLine('${r.id}','producto',this.value)"></td><td><input type="number" min="0" step="0.001" value="${esc(r.cantidad)}" onchange="updateTicketLine('${r.id}','cantidad',this.value)"></td><td><input value="${esc(r.unidad)}" onchange="updateTicketLine('${r.id}','unidad',this.value)"></td><td><input type="number" min="0" step="0.01" value="${esc(r.precioUnitario)}" onchange="updateTicketLine('${r.id}','precioUnitario',this.value)"></td><td class="monto">${fmt(rowTotal)}</td><td><button class="btn danger" type="button" onclick="removeTicketLine('${r.id}')">×</button></td></tr>`; });
+  let total=0, html='<table><thead><tr><th>Imagen</th><th>Producto</th><th>Cant.</th><th>Unidad</th><th>Precio unit.</th><th>Total</th><th></th></tr></thead><tbody>';
+  ticketDraft.forEach(r=>{
+    const rowTotal=moneyInput(r.total) || Math.round(numInput(r.cantidad)*moneyInput(r.precioUnitario)); total+=rowTotal;
+    const imagenValue = r.imagen || getProductImage(r.producto);
+    html+=`<tr>
+      <td>${productThumbHtml(r.producto,34)}<br><input class="imagen" type="url" placeholder="https://..." aria-label="URL de imagen" value="${esc(imagenValue)}" onchange="updateTicketLine('${r.id}','imagen',this.value)"></td>
+      <td><input class="product" value="${esc(r.producto)}" onchange="updateTicketLine('${r.id}','producto',this.value)"></td>
+      <td><input type="number" min="0" step="0.001" value="${esc(r.cantidad)}" onchange="updateTicketLine('${r.id}','cantidad',this.value)"></td>
+      <td><input value="${esc(r.unidad)}" onchange="updateTicketLine('${r.id}','unidad',this.value)"></td>
+      <td><input type="number" min="0" step="0.01" value="${esc(r.precioUnitario)}" onchange="updateTicketLine('${r.id}','precioUnitario',this.value)"></td>
+      <td class="monto">${fmt(rowTotal)}</td>
+      <td><button class="btn danger" type="button" onclick="removeTicketLine('${r.id}')">×</button></td>
+    </tr>`;
+  });
   wrap.innerHTML=html+'</tbody></table>'; document.getElementById('ticketDraftTotal').textContent=fmt(total);
 }
-function getPreviousPrice(producto, excludeId){ const key=cleanProduct(producto); if(!key) return null; return SUPERMERCADO.flatMap(t=>t.items.map(i=>({...i,fecha:t.fecha,ticketId:t.id}))).filter(i=>i.ticketId!==excludeId && cleanProduct(i.producto)===key && Number(i.precioUnitario)>0).sort((a,b)=>dateKey(b.fecha).localeCompare(dateKey(a.fecha)))[0]||null; }
-function comparisonHtml(producto, precio, ticketId){ const prev=getPreviousPrice(producto,ticketId); if(!prev) return '<span class="comparison-new">Primera compra</span>'; const dif=Number(precio)-Number(prev.precioUnitario); if(Math.abs(dif)<.01) return '<span class="comparison-same">Sin cambio</span>'; const pct=Math.round((dif/Number(prev.precioUnitario))*100); return `<span class="${dif>0?'comparison-up':'comparison-down'}">${dif>0?'↑':'↓'} ${Math.abs(pct)}% (${dif>0?'+':''}${fmt(dif)})</span>`; }
+function productPurchases(producto, excludeId){
+  const key=cleanProduct(producto);
+  if(!key) return [];
+  return SUPERMERCADO.flatMap(t=>(t.items||[]).map(i=>{
+    const quantity=Number(i.cantidad)||1;
+    const unit=Number(i.precioUnitario)||((Number(i.total)||0)/quantity);
+    return {producto:i.producto,precio:unit,fecha:t.fecha,ticketId:t.id,orden:Number(t.orden)||0,comercio:(t.comercio||'Supermercado').trim()||'Supermercado'};
+  })).filter(i=>i.ticketId!==excludeId && cleanProduct(i.producto)===key && Number.isFinite(i.precio) && i.precio>0)
+    .sort((a,b)=>dateKey(b.fecha).localeCompare(dateKey(a.fecha)) || b.orden-a.orden);
+}
+function latestPricesByStore(producto, excludeId){
+  const latest={};
+  productPurchases(producto,excludeId).forEach(p=>{ if(!latest[p.comercio]) latest[p.comercio]=p; });
+  return Object.values(latest).sort((a,b)=>a.precio-b.precio || a.comercio.localeCompare(b.comercio,'es'));
+}
+function previousPriceAtStore(producto, comercio, excludeId){
+  return productPurchases(producto,excludeId).find(p=>cleanMatch(p.comercio)===cleanMatch(comercio))||null;
+}
+function comparisonHtml(producto, precio, ticketId, comercio){
+  const prev=comercio ? previousPriceAtStore(producto,comercio,ticketId) : productPurchases(producto,ticketId)[0];
+  if(!prev) return `<span class="comparison-new">${comercio?'Primera compra aquí':'Primera compra'}</span>`;
+  const dif=Number(precio)-Number(prev.precio);
+  if(Math.abs(dif)<.01) return '<span class="comparison-same">Sin cambio</span>';
+  const pct=Math.round((dif/Number(prev.precio))*100);
+  return `<span class="${dif>0?'comparison-up':'comparison-down'}">${dif>0?'↑':'↓'} ${Math.abs(pct)}% (${dif>0?'+':''}${fmt(dif)})</span>`;
+}
+function productRecommendationHtml(producto){
+  const prices=latestPricesByStore(producto);
+  if(!prices.length) return '<span class="comparison-new">Sin historial suficiente</span>';
+  const best=prices[0], others=prices.slice(1);
+  const latestDate=new Date(best.fecha+'T12:00:00').toLocaleDateString('es-AR');
+  const extra=others.length ? ` · Ahorro frente a ${esc(others[0].comercio)}: ${fmt(others[0].precio-best.precio)}` : '';
+  const chips=prices.map((p,index)=>`<span class="price-history-chip${index===0?' best':''}">${esc(p.comercio)}: ${fmt(p.precio)}</span>`).join('');
+  return `<div class="recommendation"><div class="recommendation-main">Recomprar en ${esc(best.comercio)} · ${fmt(best.precio)}</div><div class="recommendation-detail">Último precio: ${latestDate}${extra}</div><div class="price-history">${chips}</div></div>`;
+}
 
 function startEditTicket(id){
   const t = SUPERMERCADO.find(x=>x.id===id); if(!t) return;
@@ -1295,9 +1373,10 @@ function toggleTicketExpand(id){ expandedTicketId = expandedTicketId===id ? null
 
 function saveTicket(){
   const fecha=document.getElementById('ticketDate').value, comercio=document.getElementById('ticketStore').value.trim()||'Supermercado', medio=document.getElementById('ticketPayment').value.trim()||'Sin especificar', fuente=document.getElementById('ticketSource').value.trim()||'Lucía y Juan', numero=document.getElementById('ticketNumber').value.trim();
-  const items=ticketDraft.map(r=>({producto:r.producto.trim(),cantidad:numInput(r.cantidad),unidad:r.unidad.trim()||'un',precioUnitario:moneyInput(r.precioUnitario),total:moneyInput(r.total)||Math.round(numInput(r.cantidad)*moneyInput(r.precioUnitario))})).filter(r=>r.producto&&r.total>0);
+  const items=ticketDraft.map(r=>({producto:r.producto.trim(),cantidad:numInput(r.cantidad),unidad:r.unidad.trim()||'un',precioUnitario:moneyInput(r.precioUnitario),total:moneyInput(r.total)||Math.round(numInput(r.cantidad)*moneyInput(r.precioUnitario)),imagen:String(r.imagen||'').trim()})).filter(r=>r.producto&&r.total>0);
   if(!fecha){ alert('Indicá la fecha de la compra.'); return; }
   if(!items.length){ alert('Cargá al menos un producto con su total.'); return; }
+  items.forEach(item=>{ if(item.imagen) setProductImage(item.producto, item.imagen); });
   const candidate={fecha,comercio,medio,fuente,numero,items};
   const duplicated=SUPERMERCADO.find(t=>t.id!==editingTicketId && sameTicket(t,candidate));
   if(duplicated){ alert(`Esta compra ya está registrada (${duplicated.numero ? 'N.º '+duplicated.numero : 'misma fecha, comercio, total y productos'}). No se volvió a guardar.`); return; }
@@ -1407,8 +1486,8 @@ function buildProductCatalog(storeFilter='all'){
       if(!key) return;
       const unit = Number(i.precioUnitario) || ((Number(i.total)||0)/(Number(i.cantidad)||1));
       if(!unit) return;
-      if(!map[key] || dateKey(t.fecha) > dateKey(map[key].fecha)){
-        map[key] = { producto: i.producto, categoria:i.categoria||productCategory(i.producto), unit, fecha: t.fecha, comercio: t.comercio, ticketId: t.id };
+      if(!map[key] || dateKey(t.fecha) > dateKey(map[key].fecha) || (dateKey(t.fecha)===dateKey(map[key].fecha) && Number(t.orden||0)>Number(map[key].orden||0))){
+        map[key] = { producto: i.producto, categoria:i.categoria||productCategory(i.producto), unit, fecha: t.fecha, comercio: t.comercio, ticketId: t.id, orden:t.orden||0 };
       }
     });
   });
@@ -1436,9 +1515,9 @@ function renderProductCatalog(){
   catalog.forEach(c=>{ const category=c.categoria||productCategory(c.producto); (groups[category]||(groups[category]=[])).push(c); });
   const categories=Object.keys(groups).sort((a,b)=>{ const ai=CATEGORY_ORDER.indexOf(a), bi=CATEGORY_ORDER.indexOf(b); return (ai<0?999:ai)-(bi<0?999:bi) || a.localeCompare(b,'es'); });
   wrap.innerHTML=categories.map(category=>{
-    const rows=groups[category].map(c=>`<tr><td>${esc(c.producto)}</td><td class="monto">${fmt(c.unit)}</td><td>${new Date(c.fecha+'T12:00:00').toLocaleDateString('es-AR')} · ${esc(c.comercio)}</td><td>${comparisonHtml(c.producto, c.unit, c.ticketId)}</td></tr>`).join('');
+    const rows=groups[category].map(c=>`<tr><td><div class="catalog-thumb-cell">${productThumbHtml(c.producto,30)}<input class="catalog-image-input" type="url" placeholder="https://..." aria-label="URL de imagen de ${esc(c.producto)}" data-producto="${esc(c.producto)}" value="${esc(getProductImage(c.producto))}" onchange="saveCatalogProductImage(this)"></div></td><td>${esc(c.producto)}</td><td class="monto">${fmt(c.unit)}</td><td>${new Date(c.fecha+'T12:00:00').toLocaleDateString('es-AR')} · ${esc(c.comercio)}</td><td>${comparisonHtml(c.producto, c.unit, c.ticketId, c.comercio)}</td><td>${productRecommendationHtml(c.producto)}</td></tr>`).join('');
     const count=groups[category].length;
-    return `<section class="catalog-category"><div class="catalog-category-title"><span>${esc(category)}</span><span>${count} producto${count===1?'':'s'}</span></div><table><thead><tr><th>Producto</th><th>Último precio</th><th>Última compra</th><th>Variación</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+    return `<section class="catalog-category"><div class="catalog-category-title"><span>${esc(category)}</span><span>${count} producto${count===1?'':'s'}</span></div><table><thead><tr><th>Imagen</th><th>Producto</th><th>Último precio</th><th>Última compra</th><th>Vs. compra anterior aquí</th><th>Recomendación de recompra</th></tr></thead><tbody>${rows}</tbody></table></section>`;
   }).join('');
 }
 
@@ -1488,7 +1567,7 @@ function renderCompraDetail(t){
   let rows='';
   t.items.forEach(i=>{
     const unit = Number(i.precioUnitario) || ((Number(i.total)||0)/(Number(i.cantidad)||1));
-    rows += `<tr><td>${esc(i.producto)}</td><td>${i.cantidad} ${esc(i.unidad)}</td><td class="monto">${fmt(unit)}</td><td class="monto">${fmt(i.total)}</td><td>${comparisonHtml(i.producto,unit,t.id)}</td></tr>`;
+    rows += `<tr><td style="display:flex;align-items:center;gap:8px;">${productThumbHtml(i.producto,26)}${esc(i.producto)}</td><td>${i.cantidad} ${esc(i.unidad)}</td><td class="monto">${fmt(unit)}</td><td class="monto">${fmt(i.total)}</td><td>${comparisonHtml(i.producto,unit,t.id,t.comercio)}</td></tr>`;
   });
   return `<div class="compra-detail">
     <table><thead><tr><th>Producto</th><th>Cant.</th><th>Precio unit.</th><th>Importe</th><th>Vs. compra anterior</th></tr></thead><tbody>${rows}</tbody></table>
