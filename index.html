@@ -308,8 +308,19 @@
   .product-thumb{ display:inline-flex; align-items:center; justify-content:center; border-radius:7px; object-fit:cover; background:var(--border-soft); flex-shrink:0; vertical-align:middle; }
   .product-thumb-empty{ color:var(--text-3); font-size:14px; }
   .ticket-lines input.imagen{ min-width:150px; }
-  .catalog-thumb-cell{ display:flex; align-items:center; gap:9px; }
-  .catalog-image-input{ width:100%; min-width:120px; font-size:11.5px !important; padding:5px 7px !important; }
+  .image-editor{position:relative;display:inline-flex;align-items:center;}
+  .product-thumb-button{border:0;padding:0;cursor:pointer;background:transparent;line-height:0;}
+  .product-thumb-button:focus-visible{outline:2px solid var(--blue);outline-offset:2px;border-radius:8px;}
+  .image-url-popover{position:absolute;z-index:5;left:0;top:calc(100% + 7px);display:flex;gap:6px;align-items:center;width:280px;padding:9px;background:#fff;border:1px solid var(--border);border-radius:9px;box-shadow:0 10px 24px rgba(22,43,78,.16);}
+  .image-url-popover input{min-width:0;flex:1;font:inherit;font-size:12px;padding:7px 8px;border:1px solid var(--border);border-radius:6px;}
+  .image-url-popover .btn{padding:7px 9px;white-space:nowrap;}
+  .product-name-cell{display:flex;align-items:flex-start;gap:9px;min-width:205px;}
+  .product-name-main{min-width:0;}
+  .product-variants{display:block;margin-top:3px;color:var(--text-3);font-size:11px;line-height:1.3;}
+  .product-link-button{display:inline-flex;align-items:center;gap:6px;border:1px solid #bdd4fb;background:#edf4ff;color:#075fcf;padding:7px 10px;border-radius:8px;cursor:pointer;font:700 11px inherit;line-height:1;white-space:nowrap;box-shadow:0 1px 2px rgba(9,78,168,.08);}
+  .product-link-button:hover{background:#dfeeff;border-color:#8eb8f4;}
+  .association-editor{margin-top:7px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+  .association-editor select{max-width:225px;padding:5px 7px;border:1px solid var(--border);border-radius:6px;background:#fff;font:inherit;font-size:11.5px;}
   .comparison-up{color:var(--red);font-weight:600;}.comparison-down{color:var(--green);font-weight:600;}.comparison-same{color:var(--text-3);}.comparison-new{color:var(--blue);}
   .recommendation{display:flex;flex-direction:column;gap:4px;min-width:190px;}
   .recommendation-main{color:#0d7441;font-weight:700;line-height:1.3;}
@@ -783,7 +794,7 @@ async function manualRefreshFromSheets(){
   setCloudStatus('☁ actualizando…','syncing');
   try{
     await pullFromSheets();
-    populateSelects();
+    populateSelects(true);
     renderResumen();
     renderRegistroTab();
     renderIngresosTab();
@@ -811,7 +822,7 @@ async function saveRegistroToSheets(registro){
 }
 async function refreshRegistroFromSheets(){
   await pullFromSheets();
-  populateSelects();
+  populateSelects(true);
   renderResumen();
   renderRegistroTab();
 }
@@ -1034,11 +1045,16 @@ function openCategoryDetail(category){
 const MARKET_STORAGE_KEY = 'jyl_supermercado_v1';
 const MARKET_SEQ_KEY = 'jyl_supermercado_seq_v1';
 const MARKET_IMAGES_KEY = 'jyl_supermercado_imagenes_v1';
+const MARKET_ALIASES_KEY = 'jyl_supermercado_aliases_v1';
 let SUPERMERCADO = [];
 let PRODUCT_IMAGES = {};
+let PRODUCT_ALIASES = {};
 let ticketDraft = [];
 let editingTicketId = null;
 let expandedTicketId = null;
+let imageEditorKey = null;
+let associationEditorKey = null;
+let ticketImageEditorId = null;
 function esc(s){ return String(s==null?'':s).replace(/[&<>'"]/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' })[c]); }
 function todayISO(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 function numInput(v){ return Number(String(v==null?'':v).replace(',','.')) || 0; }
@@ -1106,15 +1122,22 @@ function nextOrden(){ let n = Number(localStorage.getItem(MARKET_SEQ_KEY)||'0') 
 function loadMarketData(){
   try{ SUPERMERCADO = JSON.parse(localStorage.getItem(MARKET_STORAGE_KEY)||'[]'); if(!Array.isArray(SUPERMERCADO)) SUPERMERCADO=[]; }catch(e){ SUPERMERCADO=[]; }
   try{ PRODUCT_IMAGES = JSON.parse(localStorage.getItem(MARKET_IMAGES_KEY)||'{}'); if(!PRODUCT_IMAGES||typeof PRODUCT_IMAGES!=='object') PRODUCT_IMAGES={}; }catch(e){ PRODUCT_IMAGES={}; }
+  try{ PRODUCT_ALIASES = JSON.parse(localStorage.getItem(MARKET_ALIASES_KEY)||'{}'); if(!PRODUCT_ALIASES||typeof PRODUCT_ALIASES!=='object') PRODUCT_ALIASES={}; }catch(e){ PRODUCT_ALIASES={}; }
   let changed=false;
   SUPERMERCADO.forEach(t=>{ if(!t.orden){ t.orden=nextOrden(); changed=true; } if(!t.huella){ t.huella=ticketFingerprint(t); changed=true; } });
   if(changed) persistMarketData();
 }
 function persistMarketData(){ localStorage.setItem(MARKET_STORAGE_KEY, JSON.stringify(SUPERMERCADO)); }
 function persistProductImages(){ localStorage.setItem(MARKET_IMAGES_KEY, JSON.stringify(PRODUCT_IMAGES)); }
-function getProductImage(producto){ const key=cleanProduct(producto); return key ? (PRODUCT_IMAGES[key]||'') : ''; }
+function persistProductAliases(){ localStorage.setItem(MARKET_ALIASES_KEY, JSON.stringify(PRODUCT_ALIASES)); }
+function resolveProductKey(producto){
+  let key=cleanProduct(producto), steps=0;
+  while(key && PRODUCT_ALIASES[key] && PRODUCT_ALIASES[key]!==key && steps<30){ key=PRODUCT_ALIASES[key]; steps++; }
+  return key;
+}
+function getProductImage(producto){ const key=resolveProductKey(producto); return key ? (PRODUCT_IMAGES[key]||'') : ''; }
 function setProductImage(producto, url){
-  const key=cleanProduct(producto);
+  const key=resolveProductKey(producto);
   if(!key) return;
   const clean=String(url||'').trim();
   if(clean) PRODUCT_IMAGES[key]=clean; else delete PRODUCT_IMAGES[key];
@@ -1122,13 +1145,25 @@ function setProductImage(producto, url){
 }
 function saveCatalogProductImage(input){
   setProductImage(input.dataset.producto||'',input.value);
+  imageEditorKey=null;
   renderProductCatalog();
 }
-function productThumbHtml(producto, size){
-  const url=getProductImage(producto);
+function toggleProductImageEditor(producto){ imageEditorKey=imageEditorKey===resolveProductKey(producto)?null:resolveProductKey(producto); renderProductCatalog(); }
+function productThumbHtml(producto, size, urlOverride){
+  const url=String(urlOverride==null ? getProductImage(producto) : urlOverride).trim();
   const px=size||34;
   if(url) return `<img src="${esc(url)}" alt="" class="product-thumb" style="width:${px}px;height:${px}px;" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'product-thumb product-thumb-empty',style:'width:${px}px;height:${px}px;',textContent:'✕'}))">`;
   return `<span class="product-thumb product-thumb-empty" style="width:${px}px;height:${px}px;">🛒</span>`;
+}
+function catalogImageControlHtml(producto){
+  const key=resolveProductKey(producto), isOpen=imageEditorKey===key;
+  return `<div class="image-editor"><button class="product-thumb-button" type="button" data-producto="${esc(producto)}" onclick="toggleProductImageEditor(this.dataset.producto)" title="Agregar o cambiar imagen">${productThumbHtml(producto,54)}</button>${isOpen?`<div class="image-url-popover"><input type="url" placeholder="https://..." aria-label="URL de imagen de ${esc(producto)}" data-producto="${esc(producto)}" value="${esc(getProductImage(producto))}"><button class="btn primary" type="button" onclick="saveCatalogProductImage(this.previousElementSibling)">Guardar</button></div>`:''}</div>`;
+}
+function toggleTicketImageEditor(id){ ticketImageEditorId=ticketImageEditorId===id?null:id; renderTicketLines(); }
+function saveTicketImage(input){ ticketImageEditorId=null; updateTicketLine(input.dataset.id,'imagen',input.value); }
+function ticketImageControlHtml(row){
+  const isOpen=ticketImageEditorId===row.id, url=row.imagen||getProductImage(row.producto);
+  return `<div class="image-editor"><button class="product-thumb-button" type="button" data-id="${esc(row.id)}" onclick="toggleTicketImageEditor(this.dataset.id)" title="Agregar o cambiar imagen">${productThumbHtml(row.producto,48,url)}</button>${isOpen?`<div class="image-url-popover"><input type="url" placeholder="https://..." aria-label="URL de imagen" data-id="${esc(row.id)}" value="${esc(url)}"><button class="btn primary" type="button" onclick="saveTicketImage(this.previousElementSibling)">Guardar</button></div>`:''}</div>`;
 }
 function ticketTotal(ticket){ return (ticket.items||[]).reduce((sum,item)=>sum+Number(item.total||0),0); }
 /* ============================================================
@@ -1284,9 +1319,8 @@ function renderTicketLines(){
   let total=0, html='<table><thead><tr><th>Imagen</th><th>Producto</th><th>Cant.</th><th>Unidad</th><th>Precio unit.</th><th>Total</th><th></th></tr></thead><tbody>';
   ticketDraft.forEach(r=>{
     const rowTotal=moneyInput(r.total) || Math.round(numInput(r.cantidad)*moneyInput(r.precioUnitario)); total+=rowTotal;
-    const imagenValue = r.imagen || getProductImage(r.producto);
     html+=`<tr>
-      <td>${productThumbHtml(r.producto,34)}<br><input class="imagen" type="url" placeholder="https://..." aria-label="URL de imagen" value="${esc(imagenValue)}" onchange="updateTicketLine('${r.id}','imagen',this.value)"></td>
+      <td>${ticketImageControlHtml(r)}</td>
       <td><input class="product" value="${esc(r.producto)}" onchange="updateTicketLine('${r.id}','producto',this.value)"></td>
       <td><input type="number" min="0" step="0.001" value="${esc(r.cantidad)}" onchange="updateTicketLine('${r.id}','cantidad',this.value)"></td>
       <td><input value="${esc(r.unidad)}" onchange="updateTicketLine('${r.id}','unidad',this.value)"></td>
@@ -1298,13 +1332,13 @@ function renderTicketLines(){
   wrap.innerHTML=html+'</tbody></table>'; document.getElementById('ticketDraftTotal').textContent=fmt(total);
 }
 function productPurchases(producto, excludeId){
-  const key=cleanProduct(producto);
+  const key=resolveProductKey(producto);
   if(!key) return [];
   return SUPERMERCADO.flatMap(t=>(t.items||[]).map(i=>{
     const quantity=Number(i.cantidad)||1;
     const unit=Number(i.precioUnitario)||((Number(i.total)||0)/quantity);
     return {producto:i.producto,precio:unit,fecha:t.fecha,ticketId:t.id,orden:Number(t.orden)||0,comercio:(t.comercio||'Supermercado').trim()||'Supermercado'};
-  })).filter(i=>i.ticketId!==excludeId && cleanProduct(i.producto)===key && Number.isFinite(i.precio) && i.precio>0)
+  })).filter(i=>i.ticketId!==excludeId && resolveProductKey(i.producto)===key && Number.isFinite(i.precio) && i.precio>0)
     .sort((a,b)=>dateKey(b.fecha).localeCompare(dateKey(a.fecha)) || b.orden-a.orden);
 }
 function latestPricesByStore(producto, excludeId){
@@ -1331,6 +1365,43 @@ function productRecommendationHtml(producto){
   const extra=others.length ? ` · Ahorro frente a ${esc(others[0].comercio)}: ${fmt(others[0].precio-best.precio)}` : '';
   const chips=prices.map((p,index)=>`<span class="price-history-chip${index===0?' best':''}">${esc(p.comercio)}: ${fmt(p.precio)}</span>`).join('');
   return `<div class="recommendation"><div class="recommendation-main">Recomprar en ${esc(best.comercio)} · ${fmt(best.precio)}</div><div class="recommendation-detail">Último precio: ${latestDate}${extra}</div><div class="price-history">${chips}</div></div>`;
+}
+function allCanonicalProducts(){
+  const products={};
+  SUPERMERCADO.forEach(t=>(t.items||[]).forEach(i=>{
+    const key=resolveProductKey(i.producto);
+    if(key && !products[key]) products[key]=i.producto;
+  }));
+  return Object.entries(products).sort((a,b)=>a[1].localeCompare(b[1],'es'));
+}
+function productVariants(producto){
+  const key=resolveProductKey(producto), names=[];
+  SUPERMERCADO.forEach(t=>(t.items||[]).forEach(i=>{ if(resolveProductKey(i.producto)===key && !names.some(n=>cleanProduct(n)===cleanProduct(i.producto))) names.push(i.producto); }));
+  return names;
+}
+function toggleAssociationEditor(producto){ associationEditorKey=associationEditorKey===resolveProductKey(producto)?null:resolveProductKey(producto); renderProductCatalog(); renderComprasList(); }
+function associateProductGroup(sourceKey, select){
+  const source=resolveProductKey(sourceKey), target=resolveProductKey(select.value);
+  if(!source || !target || source===target){ associationEditorKey=null; renderProductCatalog(); return; }
+  Object.keys(PRODUCT_ALIASES).forEach(key=>{ if(resolveProductKey(key)===source) PRODUCT_ALIASES[key]=target; });
+  PRODUCT_ALIASES[source]=target;
+  if(PRODUCT_IMAGES[source] && !PRODUCT_IMAGES[target]) PRODUCT_IMAGES[target]=PRODUCT_IMAGES[source];
+  delete PRODUCT_IMAGES[source];
+  persistProductAliases(); persistProductImages();
+  associationEditorKey=null;
+  renderProductCatalog(); renderComprasList();
+}
+function associationEditorHtml(producto){
+  const source=resolveProductKey(producto);
+  if(associationEditorKey!==source) return '';
+  const options=allCanonicalProducts().filter(([key])=>key!==source).map(([key,name])=>`<option value="${esc(key)}">${esc(name)}</option>`).join('');
+  if(!options) return '<span class="product-variants">No hay otro producto disponible para asociar.</span>';
+  return `<div class="association-editor"><select aria-label="Producto al que asociar"><option value="">Elegir producto equivalente</option>${options}</select><button class="btn" type="button" data-source="${esc(source)}" onclick="associateProductGroup(this.dataset.source,this.previousElementSibling)">Asociar</button></div>`;
+}
+function productNameCellHtml(producto){
+  const variants=productVariants(producto);
+  const variationText=variants.length>1 ? `Incluye: ${variants.map(esc).join(' · ')}` : '';
+  return `<div class="product-name-cell"><div class="product-name-main">${esc(producto)}${variationText?`<span class="product-variants">${variationText}</span>`:''}${associationEditorHtml(producto)}</div><button class="product-link-button" type="button" data-producto="${esc(producto)}" onclick="toggleAssociationEditor(this.dataset.producto)" title="Asociar otro nombre a este producto">⛓ Asociar</button></div>`;
 }
 
 function startEditTicket(id){
@@ -1482,12 +1553,13 @@ function buildProductCatalog(storeFilter='all'){
   SUPERMERCADO.forEach(t=>{
     if(storeFilter!=='all' && (t.comercio||'').trim()!==storeFilter) return;
     (t.items||[]).forEach(i=>{
-      const key = cleanProduct(i.producto);
+      const key = resolveProductKey(i.producto);
       if(!key) return;
       const unit = Number(i.precioUnitario) || ((Number(i.total)||0)/(Number(i.cantidad)||1));
       if(!unit) return;
       if(!map[key] || dateKey(t.fecha) > dateKey(map[key].fecha) || (dateKey(t.fecha)===dateKey(map[key].fecha) && Number(t.orden||0)>Number(map[key].orden||0))){
-        map[key] = { producto: i.producto, categoria:i.categoria||productCategory(i.producto), unit, fecha: t.fecha, comercio: t.comercio, ticketId: t.id, orden:t.orden||0 };
+        const canonicalProduct=allCanonicalProducts().find(([canonicalKey])=>canonicalKey===key)?.[1]||i.producto;
+        map[key] = { producto: canonicalProduct, categoria:i.categoria||productCategory(i.producto), unit, fecha: t.fecha, comercio: t.comercio, ticketId: t.id, orden:t.orden||0 };
       }
     });
   });
@@ -1515,7 +1587,7 @@ function renderProductCatalog(){
   catalog.forEach(c=>{ const category=c.categoria||productCategory(c.producto); (groups[category]||(groups[category]=[])).push(c); });
   const categories=Object.keys(groups).sort((a,b)=>{ const ai=CATEGORY_ORDER.indexOf(a), bi=CATEGORY_ORDER.indexOf(b); return (ai<0?999:ai)-(bi<0?999:bi) || a.localeCompare(b,'es'); });
   wrap.innerHTML=categories.map(category=>{
-    const rows=groups[category].map(c=>`<tr><td><div class="catalog-thumb-cell">${productThumbHtml(c.producto,30)}<input class="catalog-image-input" type="url" placeholder="https://..." aria-label="URL de imagen de ${esc(c.producto)}" data-producto="${esc(c.producto)}" value="${esc(getProductImage(c.producto))}" onchange="saveCatalogProductImage(this)"></div></td><td>${esc(c.producto)}</td><td class="monto">${fmt(c.unit)}</td><td>${new Date(c.fecha+'T12:00:00').toLocaleDateString('es-AR')} · ${esc(c.comercio)}</td><td>${comparisonHtml(c.producto, c.unit, c.ticketId, c.comercio)}</td><td>${productRecommendationHtml(c.producto)}</td></tr>`).join('');
+    const rows=groups[category].map(c=>`<tr><td>${catalogImageControlHtml(c.producto)}</td><td>${productNameCellHtml(c.producto)}</td><td class="monto">${fmt(c.unit)}</td><td>${new Date(c.fecha+'T12:00:00').toLocaleDateString('es-AR')} · ${esc(c.comercio)}</td><td>${comparisonHtml(c.producto, c.unit, c.ticketId, c.comercio)}</td><td>${productRecommendationHtml(c.producto)}</td></tr>`).join('');
     const count=groups[category].length;
     return `<section class="catalog-category"><div class="catalog-category-title"><span>${esc(category)}</span><span>${count} producto${count===1?'':'s'}</span></div><table><thead><tr><th>Imagen</th><th>Producto</th><th>Último precio</th><th>Última compra</th><th>Vs. compra anterior aquí</th><th>Recomendación de recompra</th></tr></thead><tbody>${rows}</tbody></table></section>`;
   }).join('');
@@ -1567,7 +1639,7 @@ function renderCompraDetail(t){
   let rows='';
   t.items.forEach(i=>{
     const unit = Number(i.precioUnitario) || ((Number(i.total)||0)/(Number(i.cantidad)||1));
-    rows += `<tr><td style="display:flex;align-items:center;gap:8px;">${productThumbHtml(i.producto,26)}${esc(i.producto)}</td><td>${i.cantidad} ${esc(i.unidad)}</td><td class="monto">${fmt(unit)}</td><td class="monto">${fmt(i.total)}</td><td>${comparisonHtml(i.producto,unit,t.id,t.comercio)}</td></tr>`;
+    rows += `<tr><td style="display:flex;align-items:center;gap:10px;">${productThumbHtml(i.producto,48)}${productNameCellHtml(i.producto)}</td><td>${i.cantidad} ${esc(i.unidad)}</td><td class="monto">${fmt(unit)}</td><td class="monto">${fmt(i.total)}</td><td>${comparisonHtml(i.producto,unit,t.id,t.comercio)}</td></tr>`;
   });
   return `<div class="compra-detail">
     <table><thead><tr><th>Producto</th><th>Cant.</th><th>Precio unit.</th><th>Importe</th><th>Vs. compra anterior</th></tr></thead><tbody>${rows}</tbody></table>
@@ -1750,7 +1822,7 @@ function renderIngresosTab(){
 }
 
 /* ============ SELECTS ============ */
-function populateSelects(){
+function populateSelects(resetToCurrentMonth=false){
   const previousMonth=document.getElementById('monthSelect')?.value;
   const previousMonth2=document.getElementById('monthSelect2')?.value;
   const previousCat=document.getElementById('catSelect')?.value;
@@ -1761,15 +1833,16 @@ function populateSelects(){
   ['monthSelect','monthSelect2'].forEach(id=> document.getElementById(id).innerHTML = opts);
   ['catSelect','catSelect2'].forEach(id=> document.getElementById(id).innerHTML = catOpts);
 
-  const counts = new Array(12).fill(0);
-  REGISTRO.forEach(r=>{ if(r.fecha) counts[mesIndexFromDateStr(r.fecha)]++; });
-  let defaultMonth = 'all';
-  const maxCount = Math.max(...counts);
-  if(maxCount>0) defaultMonth = String(counts.indexOf(maxCount));
-  document.getElementById('monthSelect').value = previousMonth ?? defaultMonth;
-  document.getElementById('monthSelect2').value = previousMonth2 ?? defaultMonth;
-  document.getElementById('catSelect').value = previousCat ?? 'all';
-  document.getElementById('catSelect2').value = previousCat2 ?? 'all';
+  const currentMonth = String(new Date().getMonth());
+  const validMonth = value => value==='all' || /^(?:[0-9]|1[01])$/.test(String(value));
+  const summaryMonth = !resetToCurrentMonth && validMonth(previousMonth) ? previousMonth : currentMonth;
+  const registroMonth = !resetToCurrentMonth && validMonth(previousMonth2) ? previousMonth2 : currentMonth;
+  const summaryCategory = !resetToCurrentMonth && CATEGORIAS.includes(previousCat) ? previousCat : 'all';
+  const registroCategory = !resetToCurrentMonth && CATEGORIAS.includes(previousCat2) ? previousCat2 : 'all';
+  document.getElementById('monthSelect').value = summaryMonth;
+  document.getElementById('monthSelect2').value = registroMonth;
+  document.getElementById('catSelect').value = summaryCategory;
+  document.getElementById('catSelect2').value = registroCategory;
 
   document.getElementById('monthSelect').onchange = renderResumen;
   document.getElementById('catSelect').onchange = renderResumen;
@@ -1803,11 +1876,11 @@ function populateSelects(){
   window.setInterval(async()=>{
     try{
       await pullFromSheets();
-      populateSelects(); renderResumen(); renderRegistroTab(); renderIngresosTab();
+      populateSelects(true); renderResumen(); renderRegistroTab(); renderIngresosTab();
     }catch(err){ console.warn('Sincronización periódica de Google Sheets falló',err); }
   },30000);
 
-  populateSelects();
+  populateSelects(true);
   renderResumen();
   renderRegistroTab();
   renderIngresosTab();
