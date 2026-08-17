@@ -1,0 +1,14 @@
+{
+  "name": "Control de gastos — Lucía y Juan",
+  "short_name": "Control de gastos",
+  "description": "Control personal de gastos y comparación de productos.",
+  "lang": "es-AR",
+  "start_url": "./JUAN_Y_LU_CORREGIDO_FINAL.html",
+  "display": "standalone",
+  "background_color": "#f6f8fb",
+  "theme_color": "#062d63",
+  "icons": [
+    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
