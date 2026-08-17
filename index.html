@@ -1018,7 +1018,7 @@ let ticketDraft = [];
 let editingTicketId = null;
 let expandedTicketId = null;
 function esc(s){ return String(s==null?'':s).replace(/[&<>'"]/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' })[c]); }
-function todayISO(){ return new Date().toISOString().slice(0,10); }
+function todayISO(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 function numInput(v){ return Number(String(v==null?'':v).replace(',','.')) || 0; }
 function moneyInput(v){ const s=String(v==null?'':v).trim(); return Number(s.includes(',') ? s.replace(/\./g,'').replace(',','.') : s) || 0; }
 function parseArDate(value){
@@ -1090,20 +1090,46 @@ function loadMarketData(){
 function persistMarketData(){ localStorage.setItem(MARKET_STORAGE_KEY, JSON.stringify(SUPERMERCADO)); }
 function ticketTotal(ticket){ return (ticket.items||[]).reduce((sum,item)=>sum+Number(item.total||0),0); }
 function dateKey(value){
+  // Todas las fechas de gastos representan un día calendario, no un instante.
+  // Nunca se usa la zona horaria del navegador para modificar ese día.
+  if(value instanceof Date && !isNaN(value)){
+    // SheetJS crea fechas de Excel en UTC; getDate() las desplaza al huso local.
+    return `${value.getUTCFullYear()}-${String(value.getUTCMonth()+1).padStart(2,'0')}-${String(value.getUTCDate()).padStart(2,'0')}`;
+  }
   const raw=String(value||'').trim();
-  if(/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0,10);
-  const ar=raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+  if(!raw) return '';
+  const iso=raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(iso) return `${iso[1]}-${String(iso[2]).padStart(2,'0')}-${String(iso[3]).padStart(2,'0')}`;
+  const ar=raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})(?:\s|$)/);
   if(ar){ const year=ar[3].length===2?'20'+ar[3]:ar[3]; return `${year}-${String(ar[2]).padStart(2,'0')}-${String(ar[1]).padStart(2,'0')}`; }
-  const date=new Date(raw); return isNaN(date)?'':`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+  // Google Sheets puede devolver fechas como "Sun Aug 02 2026 ... GMT+0000".
+  // Se toma la fecha UTC para impedir que Argentina la convierta al día anterior.
+  const date=new Date(raw);
+  return isNaN(date) ? '' : `${date.getUTCFullYear()}-${String(date.getUTCMonth()+1).padStart(2,'0')}-${String(date.getUTCDate()).padStart(2,'0')}`;
 }
 function normalizeFecha(value){ const key=dateKey(value); return key ? key+'T12:00:00' : ''; }
 function registroKey(row){ return [dateKey(row.fecha),cleanMatch(row.categoria),cleanMatch(row.subcategoria),cleanMatch(row.descripcion),Number(row.monto)||0,cleanMatch(row.medio),cleanMatch(row.fuente)].join('|'); }
-function dedupeRegistro(rows){ const seen=new Set(); return rows.filter(row=>{ const key=registroKey(row); if(!key || seen.has(key)) return false; seen.add(key); return true; }); }
+function dedupeRegistro(rows){
+  // La planilla es la fuente de verdad. Dos gastos iguales el mismo día pueden ser reales;
+  // solo se descartan repeticiones que tengan el mismo identificador técnico explícito.
+  const seenIds=new Set();
+  return rows.filter(row=>{
+    const id=String(row?.id||'').trim();
+    if(!id) return true;
+    if(seenIds.has(id)) return false;
+    seenIds.add(id);
+    return true;
+  });
+}
+function displayDateFromRow(row){
+  const key=dateKey(row?.fecha);
+  return key ? new Date(key+'T12:00:00') : new Date('invalid');
+}
 function cleanMatch(value){ return String(value||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim(); }
 function normalizedTicketNumber(value){ return String(value||'').toUpperCase().replace(/[^A-Z0-9]/g,''); }
 function ticketFingerprint(ticket){ const products=(ticket.items||[]).map(item=>`${cleanProduct(item.producto)}:${Number(item.cantidad||0)}:${Number(item.total||0)}`).sort().join('|'); return [dateKey(ticket.fecha),cleanMatch(ticket.comercio),ticketTotal(ticket),cleanMatch(ticket.medio),cleanMatch(ticket.fuente),products].join('~'); }
 function sameTicket(a,b){ const aNumber=normalizedTicketNumber(a.numero), bNumber=normalizedTicketNumber(b.numero); if(aNumber&&bNumber) return aNumber===bNumber && dateKey(a.fecha)===dateKey(b.fecha) && cleanMatch(a.comercio)===cleanMatch(b.comercio); return ticketFingerprint(a)===ticketFingerprint(b); }
-function ticketRegistroRow(ticket){ return {id:'market_'+ticket.id,fecha:new Date(ticket.fecha+'T12:00:00').toISOString(),categoria:'Alimentación',subcategoria:'Supermercado',descripcion:ticket.comercio||'Supermercado',monto:ticketTotal(ticket),medio:ticket.medio||'Sin especificar',fuente:ticket.fuente||'Lucía y Juan',ticketSupermercadoId:ticket.id,ticketNumero:ticket.numero||'',ticketHuella:ticketFingerprint(ticket)}; }
+function ticketRegistroRow(ticket){ return {id:'market_'+ticket.id,fecha:normalizeFecha(ticket.fecha),categoria:'Alimentación',subcategoria:'Supermercado',descripcion:ticket.comercio||'Supermercado',monto:ticketTotal(ticket),medio:ticket.medio||'Sin especificar',fuente:ticket.fuente||'Lucía y Juan',ticketSupermercadoId:ticket.id,ticketNumero:ticket.numero||'',ticketHuella:ticketFingerprint(ticket)}; }
 function matchesTicketSummary(row,ticket){
   const total=ticketTotal(ticket), commerce=cleanMatch(ticket.comercio||'Supermercado');
   return dateKey(row.fecha)===dateKey(ticket.fecha)
@@ -1129,7 +1155,7 @@ function renderTicketLines(){
   ticketDraft.forEach(r=>{ const rowTotal=moneyInput(r.total) || Math.round(numInput(r.cantidad)*moneyInput(r.precioUnitario)); total+=rowTotal; html+=`<tr><td><input class="product" value="${esc(r.producto)}" onchange="updateTicketLine('${r.id}','producto',this.value)"></td><td><input type="number" min="0" step="0.001" value="${esc(r.cantidad)}" onchange="updateTicketLine('${r.id}','cantidad',this.value)"></td><td><input value="${esc(r.unidad)}" onchange="updateTicketLine('${r.id}','unidad',this.value)"></td><td><input type="number" min="0" step="0.01" value="${esc(r.precioUnitario)}" onchange="updateTicketLine('${r.id}','precioUnitario',this.value)"></td><td class="monto">${fmt(rowTotal)}</td><td><button class="btn danger" type="button" onclick="removeTicketLine('${r.id}')">×</button></td></tr>`; });
   wrap.innerHTML=html+'</tbody></table>'; document.getElementById('ticketDraftTotal').textContent=fmt(total);
 }
-function getPreviousPrice(producto, excludeId){ const key=cleanProduct(producto); if(!key) return null; return SUPERMERCADO.flatMap(t=>t.items.map(i=>({...i,fecha:t.fecha,ticketId:t.id}))).filter(i=>i.ticketId!==excludeId && cleanProduct(i.producto)===key && Number(i.precioUnitario)>0).sort((a,b)=>new Date(b.fecha)-new Date(a.fecha))[0]||null; }
+function getPreviousPrice(producto, excludeId){ const key=cleanProduct(producto); if(!key) return null; return SUPERMERCADO.flatMap(t=>t.items.map(i=>({...i,fecha:t.fecha,ticketId:t.id}))).filter(i=>i.ticketId!==excludeId && cleanProduct(i.producto)===key && Number(i.precioUnitario)>0).sort((a,b)=>dateKey(b.fecha).localeCompare(dateKey(a.fecha)))[0]||null; }
 function comparisonHtml(producto, precio, ticketId){ const prev=getPreviousPrice(producto,ticketId); if(!prev) return '<span class="comparison-new">Primera compra</span>'; const dif=Number(precio)-Number(prev.precioUnitario); if(Math.abs(dif)<.01) return '<span class="comparison-same">Sin cambio</span>'; const pct=Math.round((dif/Number(prev.precioUnitario))*100); return `<span class="${dif>0?'comparison-up':'comparison-down'}">${dif>0?'↑':'↓'} ${Math.abs(pct)}% (${dif>0?'+':''}${fmt(dif)})</span>`; }
 
 function startEditTicket(id){
@@ -1284,7 +1310,7 @@ function buildProductCatalog(storeFilter='all'){
       if(!key) return;
       const unit = Number(i.precioUnitario) || ((Number(i.total)||0)/(Number(i.cantidad)||1));
       if(!unit) return;
-      if(!map[key] || new Date(t.fecha) > new Date(map[key].fecha)){
+      if(!map[key] || dateKey(t.fecha) > dateKey(map[key].fecha)){
         map[key] = { producto: i.producto, categoria:i.categoria||productCategory(i.producto), unit, fecha: t.fecha, comercio: t.comercio, ticketId: t.id };
       }
     });
@@ -1334,7 +1360,7 @@ function renderComprasList(){
     wrap.innerHTML = '<div class="empty-note">' + (storeFilter!=='all' ? 'No hay compras registradas en ese supermercado.' : 'Todavía no hay compras de supermercado registradas. Pegá una compra en texto, subí una foto del ticket o cargá los productos manualmente.') + '</div>';
     return;
   }
-  const sorted = [...list].sort((a,b)=> (new Date(b.fecha)-new Date(a.fecha)) || ((b.orden||0)-(a.orden||0)));
+  const sorted = [...list].sort((a,b)=> dateKey(b.fecha).localeCompare(dateKey(a.fecha)) || ((b.orden||0)-(a.orden||0)));
   let html='';
   sorted.forEach(t=>{
     const total = t.items.reduce((s,i)=>s+Number(i.total||0),0);
@@ -1442,7 +1468,7 @@ function saveRegistroEntry(event){
   if(!fecha||!categoria||!subcategoria||!descripcion||!Number.isFinite(monto)||monto<=0) return;
   const exists=REGISTRO.some(r=>dateKey(r.fecha)===fecha&&cleanMatch(r.categoria)===cleanMatch(categoria)&&cleanMatch(r.subcategoria)===cleanMatch(subcategoria)&&cleanMatch(r.descripcion)===cleanMatch(descripcion)&&Number(r.monto)===monto&&cleanMatch(r.medio)===cleanMatch(medio)&&cleanMatch(r.fuente)===cleanMatch(fuente));
   if(exists){ alert('Ese movimiento ya está registrado.'); return; }
-  const entry={id:ticketRowId(),fecha:new Date(fecha+'T12:00:00').toISOString(),categoria,subcategoria,descripcion,monto,medio,fuente};
+  const entry={id:ticketRowId(),fecha:normalizeFecha(fecha),categoria,subcategoria,descripcion,monto,medio,fuente};
   REGISTRO.push(entry);
   saveRegistroToSheets(entry).catch(err=>{ console.error('No se pudo guardar el movimiento en Google Sheets',err); setCloudStatus('☁ error al actualizar Google Sheets: '+err.message,'err'); });
   event.target.reset();
@@ -1459,16 +1485,16 @@ function renderRegistroTab(){
     tableWrap.innerHTML = '<div class="empty-note">No hay movimientos que coincidan con el filtro elegido.</div>';
     return;
   }
-  const sorted = [...rows].sort((a,b)=> new Date(b.fecha) - new Date(a.fecha));
+  const sorted = [...rows].sort((a,b)=> dateKey(b.fecha).localeCompare(dateKey(a.fecha)));
   let html = '<div class="registro-table-scroll"><table class="registro-table"><thead><tr><th>Fecha</th><th>Categoría</th><th>Rubro</th><th>Detalle</th><th>Medio de pago</th><th style="text-align:right;">Importe</th></tr></thead><tbody>';
   let previousDay = '';
   sorted.forEach(r=>{
-    const d = new Date(r.fecha);
+    const d = displayDateFromRow(r);
     const fechaStr = d.toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'});
     const cc = catColor(r.categoria);
-    const dayKey = d.toISOString().slice(0,10);
+    const dayKey = dateKey(r.fecha);
     if(dayKey!==previousDay){
-      const sameDay = sorted.filter(item=>new Date(item.fecha).toISOString().slice(0,10)===dayKey);
+      const sameDay = sorted.filter(item=>dateKey(item.fecha)===dayKey);
       const dayTotal = sameDay.reduce((sum,item)=>sum+(Number(item.monto)||0),0);
       const dayName = d.toLocaleDateString('es-AR',{weekday:'long',day:'2-digit',month:'short'}).replace(/^./,c=>c.toUpperCase());
       html += '<tr class="registro-day-row"><td colspan="6"><span class="registro-day-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="5" width="16" height="15" rx="2"></rect><path d="M8 3v4M16 3v4M4 10h16"></path></svg>' + esc(dayName) + '</span><span class="registro-day-total">Total del día <strong>' + fmt(dayTotal) + '</strong></span></td></tr>';
@@ -1586,10 +1612,13 @@ function populateSelects(){
 
 /* ============ CARGA DE ARCHIVO ============ */
 function excelDateToISO(v){
-  if(v instanceof Date) return v.toISOString();
-  if(typeof v === 'number'){ const d = XLSX.SSF.parse_date_code(v); return new Date(Date.UTC(d.y, d.m-1, d.d)).toISOString(); }
-  if(typeof v === 'string'){ const d = new Date(v); if(!isNaN(d)) return d.toISOString(); }
-  return null;
+  if(v instanceof Date) return normalizeFecha(v);
+  if(typeof v === 'number'){
+    const d=XLSX.SSF.parse_date_code(v);
+    return d ? `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}T12:00:00` : null;
+  }
+  const key=dateKey(v);
+  return key ? key+'T12:00:00' : null;
 }
 document.getElementById('fileInput').addEventListener('change', function(e){
   const file = e.target.files[0];
