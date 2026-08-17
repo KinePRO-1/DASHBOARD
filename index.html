@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Control de gastos — Lucía y Juan</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root{
@@ -393,11 +392,9 @@
     </div>
     <div class="top-actions">
       <div>
-        <span class="upload-status" id="uploadStatus">datos del archivo original</span>
         <div class="cloud-status" id="cloudStatus">☁ conectando…</div>
       </div>
-      <button class="upload-btn" onclick="document.getElementById('fileInput').click()">⭱ Cargar Excel actualizado</button>
-      <input type="file" id="fileInput" accept=".xlsx,.xls">
+      <button class="upload-btn" onclick="manualRefreshFromSheets()">⟳ Actualizar desde Google Sheets</button>
     </div>
   </div>
 
@@ -503,7 +500,7 @@
           <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M7 12h10M10 18h4"></path></svg>
           <select id="catSelect2" aria-label="Categoría"></select>
         </div>
-        <button class="registro-action" type="button" onclick="document.getElementById('fileInput').click()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Actualizar registro</button>
+        <button class="registro-action" type="button" onclick="manualRefreshFromSheets()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Actualizar registro</button>
         <button class="registro-action registro-add-action" type="button" onclick="openRegistroModal()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Nuevo movimiento</button>
       </div>
       <div class="registro-summary">
@@ -649,7 +646,7 @@
     </form>
   </div>
 
-  <footer>control de gastos · actualizá el excel y volvé a cargarlo para refrescar todas las pestañas</footer>
+  <footer>control de gastos · los datos se leen en vivo desde Google Sheets</footer>
 
 <script>
 /* ============ DATOS EMBEBIDOS (del archivo original GASTOS_JYL) ============ */
@@ -688,38 +685,11 @@ const STAT_ICONS = {
 };
 const LIGHTBULB_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="9" y1="18" x2="15" y2="18"></line><line x1="10" y1="22" x2="14" y2="22"></line><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"></path></svg>';
 
-let REGISTRO = [{"fecha":"2026-07-22T00:00:00","categoria":"Vivienda","subcategoria":"Alquiler","descripcion":"Reserva - Ingreso","monto":300000.0,"medio":"Transferencia","fuente":"Lucía y Juan"},{"fecha":"2026-07-27T00:00:00","categoria":"Impuestos","subcategoria":"Impuesto inmobiliario","descripcion":"API","monto":8500.0,"medio":"Transferencia","fuente":"Lucía y Juan"},{"fecha":"2026-07-27T00:00:00","categoria":"Impuestos","subcategoria":"Impuesto inmobiliario","descripcion":"TGI","monto":31000.0,"medio":"Transferencia","fuente":"Lucía y Juan"},{"fecha":"2026-07-27T00:00:00","categoria":"Impuestos","subcategoria":"Seguro del hogar","descripcion":"SEGURO","monto":20000.0,"medio":"Transferencia","fuente":"Lucía y Juan"},{"fecha":"2026-07-27T00:00:00","categoria":"Impuestos","subcategoria":"Agua","descripcion":"AGUA","monto":12000.0,"medio":"Transferencia","fuente":"Lucía y Juan"},{"fecha":"2026-07-27T00:00:00","categoria":"Vivienda","subcategoria":"Alquiler","descripcion":"2 MESES","monto":1359000.0,"medio":"Efectivo","fuente":"Lucía y Juan"},{"fecha":"2026-07-27T00:00:00","categoria":"Vivienda","subcategoria":"Alquiler","descripcion":"1 MES (menos la reserva)","monto":560500.0,"medio":"Transferencia","fuente":"Lucía y Juan"},{"fecha":"2026-07-27T00:00:00","categoria":"Vivienda","subcategoria":"Otros servicios","descripcion":"INFORME GARANTES","monto":68000.0,"medio":"Transferencia","fuente":"Lucía y Juan"},{"fecha":"2026-07-27T00:00:00","categoria":"Vivienda","subcategoria":"Impuesto inmobiliario","descripcion":"SELLADO CONTRATO","monto":15500.0,"medio":"Transferencia","fuente":"Lucía y Juan"}];
-// El registro de gastos no tiene copia local ni nube secundaria: siempre se carga desde Google Sheets.
-REGISTRO = [];
-
-let INGRESOS = [
-  {fuente:"Lucia", meses:[
-    {mes:"Ene",efectivo:0,transferencia:0},{mes:"Feb",efectivo:0,transferencia:0},{mes:"Mar",efectivo:0,transferencia:0},
-    {mes:"Abr",efectivo:0,transferencia:0},{mes:"May",efectivo:0,transferencia:0},{mes:"Jun",efectivo:0,transferencia:0},
-    {mes:"Jul",efectivo:218000,transferencia:900000},{mes:"Ago",efectivo:0,transferencia:0},{mes:"Sep",efectivo:0,transferencia:0},
-    {mes:"Oct",efectivo:0,transferencia:0},{mes:"Nov",efectivo:0,transferencia:0},{mes:"Dic",efectivo:0,transferencia:0}
-  ]},
-  {fuente:"Juan", meses:[
-    {mes:"Ene",efectivo:0,transferencia:0},{mes:"Feb",efectivo:0,transferencia:0},{mes:"Mar",efectivo:0,transferencia:0},
-    {mes:"Abr",efectivo:0,transferencia:0},{mes:"May",efectivo:0,transferencia:0},{mes:"Jun",efectivo:0,transferencia:0},
-    {mes:"Jul",efectivo:842000,transferencia:50000},{mes:"Ago",efectivo:0,transferencia:0},{mes:"Sep",efectivo:0,transferencia:0},
-    {mes:"Oct",efectivo:0,transferencia:0},{mes:"Nov",efectivo:0,transferencia:0},{mes:"Dic",efectivo:0,transferencia:0}
-  ]},
-  {fuente:"Santi", meses:[
-    {mes:"Ene",efectivo:0,transferencia:0},{mes:"Feb",efectivo:0,transferencia:0},{mes:"Mar",efectivo:0,transferencia:0},
-    {mes:"Abr",efectivo:0,transferencia:0},{mes:"May",efectivo:0,transferencia:0},{mes:"Jun",efectivo:0,transferencia:0},
-    {mes:"Jul",efectivo:0,transferencia:0},{mes:"Ago",efectivo:0,transferencia:0},{mes:"Sep",efectivo:0,transferencia:0},
-    {mes:"Oct",efectivo:0,transferencia:0},{mes:"Nov",efectivo:0,transferencia:0},{mes:"Dic",efectivo:0,transferencia:0}
-  ]},
-  {fuente:"Alfred", meses:[
-    {mes:"Ene",efectivo:0,transferencia:0},{mes:"Feb",efectivo:0,transferencia:0},{mes:"Mar",efectivo:0,transferencia:0},
-    {mes:"Abr",efectivo:0,transferencia:0},{mes:"May",efectivo:0,transferencia:0},{mes:"Jun",efectivo:0,transferencia:0},
-    {mes:"Jul",efectivo:0,transferencia:400000},{mes:"Ago",efectivo:0,transferencia:0},{mes:"Sep",efectivo:0,transferencia:0},
-    {mes:"Oct",efectivo:0,transferencia:0},{mes:"Nov",efectivo:0,transferencia:0},{mes:"Dic",efectivo:0,transferencia:0}
-  ]}
-];
-
-// Presupuesto: Categoría -> array[12] de límites mensuales. Todo en 0 en el archivo original (sin definir).
+// Google Sheets es la ÚNICA fuente de datos de la app. Todo arranca vacío y se
+// completa exclusivamente con lo que devuelva pullFromSheets() al iniciar.
+let REGISTRO = [];
+let INGRESOS = [];
+// Presupuesto: Categoría -> array[12] de límites mensuales.
 let PRESUPUESTO = CATEGORIAS.map(c=>({categoria:c, meses:new Array(12).fill(0)}));
 
 const PERSON_PALETTE = ['#1a73e8','#f29900','#7c4dff','#1e8e5a','#d93025','#12b5b0'];
@@ -734,7 +704,7 @@ function getPersonaColor(fuente){
 }
 
 /* ============ SINCRONIZACIÓN: GOOGLE SHEETS ES LA ÚNICA FUENTE ============ */
-const SHEETS_SYNC_URL = 'https://script.google.com/macros/s/AKfycbyjpRFtn1ZZqYTmlEJb054qnTtz-nZFXUE7hlX1m8bjSS-iqSm_vL5dUQzv2X1slweJhg/exec';
+const SHEETS_SYNC_URL = 'https://script.google.com/macros/s/AKfycbwgBOruKL2FC221GyunTfhWtgImNvcJtYiolJhdnESYzGppbsac6ebSa3A7SQYfXJq2fg/exec';
 const SHEETS_SYNC_KEY = 'JYL_SYNC_2026_15_AGOSTO';
 async function sheetsRequest(action, payload={}){
   const body={clave:SHEETS_SYNC_KEY,accion:action,...payload};
@@ -775,8 +745,42 @@ async function pullFromSheets(){
     normalized.push(row);
   });
   REGISTRO=normalized;
+
+  // Ingresos: mismo criterio, Sheets manda. Si la hoja no manda "ingresos", no se toca.
+  if(Array.isArray(data.ingresos)){
+    INGRESOS = data.ingresos.map(f=>({
+      fuente: String(f.fuente||'').trim(),
+      meses: MESES.map((m,i)=>{
+        const src = Array.isArray(f.meses) ? f.meses[i] : null;
+        return { mes:m, efectivo:Number(src?.efectivo)||0, transferencia:Number(src?.transferencia)||0 };
+      })
+    })).filter(f=>f.fuente);
+  }
+
+  // Presupuesto: idem.
+  if(Array.isArray(data.presupuesto)){
+    PRESUPUESTO = data.presupuesto.map(p=>({
+      categoria: String(p.categoria||'').trim(),
+      meses: Array.from({length:12},(_,i)=> Number(p.meses?.[i])||0)
+    })).filter(p=>p.categoria);
+  }
+
   renderSyncAuditBanner();
   return data;
+}
+async function manualRefreshFromSheets(){
+  setCloudStatus('☁ actualizando…','syncing');
+  try{
+    await pullFromSheets();
+    populateSelects();
+    renderResumen();
+    renderRegistroTab();
+    renderIngresosTab();
+    setCloudStatus('☁ Google Sheets sincronizado','ok');
+  }catch(err){
+    console.error('No se pudo actualizar desde Google Sheets',err);
+    setCloudStatus('☁ no se pudo leer Google Sheets: '+err.message,'err');
+  }
 }
 function renderSyncAuditBanner(){
   const el=document.getElementById('syncAuditBanner');
@@ -1640,11 +1644,10 @@ function saveIncomeEntry(event){
   const method = document.getElementById('incomeMethodInput').value;
   const amount = Number(document.getElementById('incomeAmountInput').value);
   if(!name || !Number.isFinite(amount) || amount<=0) return;
-  let source = INGRESOS.find(f=>normalizeName(f.fuente)===normalizeName(name));
-  if(!source){ source={fuente:name,meses:MESES.map(m=>({mes:m,efectivo:0,transferencia:0}))}; INGRESOS.push(source); }
-  source.meses[month][method] = (Number(source.meses[month][method])||0) + amount;
-  saveIngresoToSheets({fuente:name,mes:month,medio:method,monto:amount}).catch(err=>{ console.error('No se pudo guardar el ingreso en Google Sheets',err); setCloudStatus('☁ error al actualizar Google Sheets: '+err.message,'err'); });
-  closeIncomeModal(); event.target.reset(); renderIngresosTab(); renderResumen(); syncToCloud();
+  saveIngresoToSheets({fuente:name,mes:month,medio:method,monto:amount})
+    .then(manualRefreshFromSheets)
+    .catch(err=>{ console.error('No se pudo guardar el ingreso en Google Sheets',err); setCloudStatus('☁ error al actualizar Google Sheets: '+err.message,'err'); });
+  closeIncomeModal(); event.target.reset();
 }
 function renderIngresosTab(){
   const wrap = document.getElementById('ingresosTableWrap');
@@ -1703,74 +1706,6 @@ function populateSelects(){
   };
 }
 
-/* ============ CARGA DE ARCHIVO ============ */
-function excelDateToISO(v){
-  if(v instanceof Date) return normalizeFecha(v);
-  if(typeof v === 'number'){
-    const d=XLSX.SSF.parse_date_code(v);
-    return d ? `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}T12:00:00` : null;
-  }
-  const key=dateKey(v);
-  return key ? key+'T12:00:00' : null;
-}
-document.getElementById('fileInput').addEventListener('change', function(e){
-  const file = e.target.files[0];
-  if(!file) return;
-  const status = document.getElementById('uploadStatus');
-  status.className = 'upload-status';
-  status.textContent = 'leyendo ' + file.name + '...';
-
-  const reader = new FileReader();
-  reader.onload = function(evt){
-    try{
-      const wb = XLSX.read(evt.target.result, {type:'array', cellDates:true});
-
-      const wsReg = wb.Sheets['Registro'];
-      if(!wsReg) throw new Error('No se encontró la hoja "Registro"');
-      const regJson = XLSX.utils.sheet_to_json(wsReg, {header:1, range:3, defval:null});
-      const newRegistro = [];
-      regJson.forEach(row=>{
-        const [fecha,cat,sub,desc,monto,medio,fuente] = row;
-        if(fecha==null && (monto==null || monto==='')) return;
-        const iso = excelDateToISO(fecha);
-        if(!iso) return;
-        newRegistro.push(normalizeRegistroRow({ fecha: iso, categoria: cat, subcategoria: sub, descripcion: desc, monto, medio, fuente }));
-      });
-
-      const wsPres = wb.Sheets['Presupuesto'];
-      let newPresupuesto = PRESUPUESTO;
-      if(wsPres){
-        const presJson = XLSX.utils.sheet_to_json(wsPres, {header:1, range:2, defval:0});
-        newPresupuesto = [];
-        presJson.forEach(row=>{
-          const cat = row[0];
-          if(!cat || String(cat).trim()==='' || /^TOTAL/i.test(String(cat))) return;
-          const meses = [];
-          for(let i=0;i<12;i++){ meses.push(Number(row[1+i])||0); }
-          newPresupuesto.push({ categoria: String(cat).trim(), meses });
-        });
-      }
-
-      if(newRegistro.length===0) throw new Error('No se encontraron movimientos en "Registro"');
-
-      REGISTRO = dedupeRegistro(newRegistro);
-      PRESUPUESTO = newPresupuesto;
-      syncMarketToRegistro();
-      populateSelects();
-      renderResumen();
-      renderRegistroTab();
-
-      status.className = 'upload-status ok';
-      status.textContent = '✓ actualizado con ' + file.name + ' (' + newRegistro.length + ' movimientos)';
-      syncToCloud();
-    } catch(err){
-      status.className = 'upload-status err';
-      status.textContent = '✗ ' + err.message;
-    }
-  };
-  reader.readAsArrayBuffer(file);
-});
-
 /* ============ INIT ============ */
 (async function init(){
   loadMarketData();
@@ -1789,13 +1724,14 @@ document.getElementById('fileInput').addEventListener('change', function(e){
   window.setInterval(async()=>{
     try{
       await pullFromSheets();
-      populateSelects(); renderResumen(); renderRegistroTab();
+      populateSelects(); renderResumen(); renderRegistroTab(); renderIngresosTab();
     }catch(err){ console.warn('Sincronización periódica de Google Sheets falló',err); }
   },30000);
 
   populateSelects();
   renderResumen();
   renderRegistroTab();
+  renderIngresosTab();
   renderTicketLines();
   renderSupermercadoTab();
 })();
