@@ -6,35 +6,6 @@
 <title>Control de gastos — Lucía y Juan</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
-  import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
-
-  const firebaseConfig = {
-    apiKey: "AIzaSyDK65pQpjde-51hQPCFog_lv2COh9v2e40",
-    authDomain: "dashboard-1844f.firebaseapp.com",
-    projectId: "dashboard-1844f",
-    storageBucket: "dashboard-1844f.firebasestorage.app",
-    messagingSenderId: "517779911078",
-    appId: "1:517779911078:web:0915b61f6c9a9bc4cc9f67"
-  };
-
-  const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
-  const DASHBOARD_DOC = doc(db, "dashboards", "jyl");
-
-  window.dbLoadDashboard = async function(){
-    const snap = await getDoc(DASHBOARD_DOC);
-    return snap.exists() ? snap.data() : null;
-  };
-
-  window.dbSaveDashboard = async function(data){
-    await setDoc(DASHBOARD_DOC, { ...data, actualizadoEl: serverTimestamp() });
-    return true;
-  };
-
-  window.dispatchEvent(new Event('firebase-ready'));
-</script>
 <style>
   :root{
     --bg:#f6f8fb;
@@ -716,6 +687,8 @@ const STAT_ICONS = {
 const LIGHTBULB_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="9" y1="18" x2="15" y2="18"></line><line x1="10" y1="22" x2="14" y2="22"></line><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"></path></svg>';
 
 let REGISTRO = [{"fecha":"2026-07-22T00:00:00","categoria":"Vivienda","subcategoria":"Alquiler","descripcion":"Reserva - Ingreso","monto":300000.0,"medio":"Transferencia","fuente":"Lucía y Juan"},{"fecha":"2026-07-27T00:00:00","categoria":"Impuestos","subcategoria":"Impuesto inmobiliario","descripcion":"API","monto":8500.0,"medio":"Transferencia","fuente":"Lucía y Juan"},{"fecha":"2026-07-27T00:00:00","categoria":"Impuestos","subcategoria":"Impuesto inmobiliario","descripcion":"TGI","monto":31000.0,"medio":"Transferencia","fuente":"Lucía y Juan"},{"fecha":"2026-07-27T00:00:00","categoria":"Impuestos","subcategoria":"Seguro del hogar","descripcion":"SEGURO","monto":20000.0,"medio":"Transferencia","fuente":"Lucía y Juan"},{"fecha":"2026-07-27T00:00:00","categoria":"Impuestos","subcategoria":"Agua","descripcion":"AGUA","monto":12000.0,"medio":"Transferencia","fuente":"Lucía y Juan"},{"fecha":"2026-07-27T00:00:00","categoria":"Vivienda","subcategoria":"Alquiler","descripcion":"2 MESES","monto":1359000.0,"medio":"Efectivo","fuente":"Lucía y Juan"},{"fecha":"2026-07-27T00:00:00","categoria":"Vivienda","subcategoria":"Alquiler","descripcion":"1 MES (menos la reserva)","monto":560500.0,"medio":"Transferencia","fuente":"Lucía y Juan"},{"fecha":"2026-07-27T00:00:00","categoria":"Vivienda","subcategoria":"Otros servicios","descripcion":"INFORME GARANTES","monto":68000.0,"medio":"Transferencia","fuente":"Lucía y Juan"},{"fecha":"2026-07-27T00:00:00","categoria":"Vivienda","subcategoria":"Impuesto inmobiliario","descripcion":"SELLADO CONTRATO","monto":15500.0,"medio":"Transferencia","fuente":"Lucía y Juan"}];
+// El registro de gastos no tiene copia local ni nube secundaria: siempre se carga desde Google Sheets.
+REGISTRO = [];
 
 let INGRESOS = [
   {fuente:"Lucia", meses:[
@@ -758,7 +731,7 @@ function getPersonaColor(fuente){
   return personaColorByIndex(idx>=0 ? idx : 0);
 }
 
-/* ============ SINCRONIZACIÓN CON FIREBASE ============ */
+/* ============ SINCRONIZACIÓN: GOOGLE SHEETS ES LA ÚNICA FUENTE ============ */
 const SHEETS_SYNC_URL = 'https://script.google.com/macros/s/AKfycbyjpRFtn1ZZqYTmlEJb054qnTtz-nZFXUE7hlX1m8bjSS-iqSm_vL5dUQzv2X1slweJhg/exec';
 const SHEETS_SYNC_KEY = 'JYL_SYNC_2026_15_AGOSTO';
 async function sheetsRequest(action, payload={}){
@@ -773,23 +746,23 @@ async function pullFromSheets(){
   const response=await fetch(url);
   const data=await response.json();
   if(!data.ok) throw new Error(data.error||'No se pudo leer Google Sheets.');
-  if(Array.isArray(data.registro)) REGISTRO=dedupeRegistro(data.registro.map(normalizeRegistroRow));
+  if(!Array.isArray(data.registro)) throw new Error('Google Sheets devolvió un registro inválido.');
+  // Reemplazo completo: nunca se mezclan movimientos nuevos con una copia anterior.
+  REGISTRO=data.registro.map(normalizeRegistroRow).filter(r=>dateKey(r.fecha) && r.monto>0);
   return data;
 }
 async function saveRegistroToSheets(registro){
   const data=await sheetsRequest('guardarRegistro',{registro});
   return data.registro;
 }
+async function refreshRegistroFromSheets(){
+  await pullFromSheets();
+  populateSelects();
+  renderResumen();
+  renderRegistroTab();
+}
 async function deleteRegistroFromSheets(id){ await sheetsRequest('eliminarRegistro',{id}); }
 async function saveIngresoToSheets(ingreso){ return sheetsRequest('guardarIngreso',{ingreso}); }
-function waitForFirebase(timeoutMs=6000){
-  return new Promise((resolve,reject)=>{
-    if(window.dbLoadDashboard && window.dbSaveDashboard) return resolve();
-    let done=false;
-    window.addEventListener('firebase-ready', ()=>{ if(!done){ done=true; resolve(); } }, {once:true});
-    setTimeout(()=>{ if(!done){ done=true; reject(new Error('timeout')); } }, timeoutMs);
-  });
-}
 function setCloudStatus(text, cls){
   const el = document.getElementById('cloudStatus');
   if(!el) return;
@@ -797,15 +770,8 @@ function setCloudStatus(text, cls){
   el.className = 'cloud-status' + (cls ? ' '+cls : '');
 }
 async function syncToCloud(){
-  if(!window.dbSaveDashboard){ setCloudStatus('☁ sin conexión a la base de datos', 'err'); return; }
-  setCloudStatus('☁ sincronizando…', 'syncing');
-  try{
-    await window.dbSaveDashboard({ REGISTRO, PRESUPUESTO, SUPERMERCADO });
-    setCloudStatus('☁ sincronizado', 'ok');
-  }catch(err){
-    console.error('Error al sincronizar con Firebase', err);
-    setCloudStatus('☁ error al sincronizar: ' + err.message, 'err');
-  }
+  // Compatibilidad con acciones existentes. No guarda gastos en una segunda base.
+  return true;
 }
 
 /* ============ HELPERS ============ */
@@ -1210,7 +1176,7 @@ function saveTicket(){
     Object.assign(t, {fecha,comercio,medio,fuente,numero,items,huella:ticketFingerprint(candidate)});
     REGISTRO = REGISTRO.filter(r=>r.ticketSupermercadoId!==editingTicketId);
     REGISTRO.push(ticketRegistroRow(t));
-    saveRegistroToSheets(ticketRegistroRow(t)).catch(err=>{ console.error('No se pudo actualizar el ticket en Google Sheets',err); setCloudStatus('☁ error al actualizar Google Sheets: '+err.message,'err'); });
+    saveRegistroToSheets(ticketRegistroRow(t)).then(refreshRegistroFromSheets).catch(err=>{ console.error('No se pudo actualizar el ticket en Google Sheets',err); setCloudStatus('☁ error al actualizar Google Sheets: '+err.message,'err'); });
     persistMarketData();
     document.getElementById('ocrStatus').textContent = 'Compra actualizada: ' + items.length + ' producto' + (items.length===1?'':'s') + ' y ' + fmt(items.reduce((s,i)=>s+i.total,0)) + '.';
     expandedTicketId = editingTicketId;
@@ -1219,7 +1185,7 @@ function saveTicket(){
     const id=ticketRowId(), compra={id, orden: nextOrden(), fecha,comercio,medio,fuente,numero,items,huella:ticketFingerprint(candidate)};
     SUPERMERCADO.push(compra); persistMarketData();
     REGISTRO.push(ticketRegistroRow(compra));
-    saveRegistroToSheets(ticketRegistroRow(compra)).catch(err=>{ console.error('No se pudo guardar el ticket en Google Sheets',err); setCloudStatus('☁ error al actualizar Google Sheets: '+err.message,'err'); });
+    saveRegistroToSheets(ticketRegistroRow(compra)).then(refreshRegistroFromSheets).catch(err=>{ console.error('No se pudo guardar el ticket en Google Sheets',err); setCloudStatus('☁ error al actualizar Google Sheets: '+err.message,'err'); });
     ticketDraft=[]; document.getElementById('ticketNumber').value=''; document.getElementById('ticketTextImport').value='';
     document.getElementById('ocrStatus').textContent='Compra guardada: '+items.length+' producto'+(items.length===1?'':'s')+' y '+fmt(items.reduce((s,i)=>s+i.total,0))+' incorporados al gasto global como una sola compra.';
     expandedTicketId = id;
@@ -1470,7 +1436,7 @@ function saveRegistroEntry(event){
   if(exists){ alert('Ese movimiento ya está registrado.'); return; }
   const entry={id:ticketRowId(),fecha:normalizeFecha(fecha),categoria,subcategoria,descripcion,monto,medio,fuente};
   REGISTRO.push(entry);
-  saveRegistroToSheets(entry).catch(err=>{ console.error('No se pudo guardar el movimiento en Google Sheets',err); setCloudStatus('☁ error al actualizar Google Sheets: '+err.message,'err'); });
+  saveRegistroToSheets(entry).then(refreshRegistroFromSheets).catch(err=>{ console.error('No se pudo guardar el movimiento en Google Sheets',err); setCloudStatus('☁ error al actualizar Google Sheets: '+err.message,'err'); });
   event.target.reset();
   closeRegistroModal();
   renderRegistroTab(); renderResumen(); syncToCloud();
@@ -1681,32 +1647,15 @@ document.getElementById('fileInput').addEventListener('change', function(e){
 /* ============ INIT ============ */
 (async function init(){
   loadMarketData();
-  syncMarketToRegistro();
   document.getElementById('ticketDate').value = todayISO();
-
-  try{
-    await waitForFirebase();
-    const cloudData = await window.dbLoadDashboard();
-    if(cloudData){
-      if(Array.isArray(cloudData.REGISTRO)) REGISTRO = dedupeRegistro(cloudData.REGISTRO.map(normalizeRegistroRow));
-      if(Array.isArray(cloudData.PRESUPUESTO)) PRESUPUESTO = cloudData.PRESUPUESTO;
-      if(Array.isArray(cloudData.SUPERMERCADO)){ SUPERMERCADO = cloudData.SUPERMERCADO; persistMarketData(); }
-      setCloudStatus('☁ sincronizado', 'ok');
-    } else {
-      setCloudStatus('☁ sin datos previos en la nube — se suben con la próxima carga', 'syncing');
-    }
-  }catch(err){
-    console.error('No se pudo conectar con Firebase', err);
-    setCloudStatus('☁ sin conexión a la base de datos (usando copia local)', 'err');
-  }
 
   try{
     setCloudStatus('☁ leyendo Google Sheets…','syncing');
     await pullFromSheets();
     setCloudStatus('☁ Google Sheets sincronizado','ok');
-    syncToCloud();
   }catch(err){
     console.error('No se pudo sincronizar Google Sheets',err);
+    REGISTRO=[];
     setCloudStatus('☁ no se pudo leer Google Sheets: '+err.message,'err');
   }
 
