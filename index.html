@@ -206,8 +206,10 @@
   .stat-cards{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
   .stat-card{
     border:1px solid var(--border); border-left:3px solid var(--accent,#9096a1); border-radius:9px; padding:13px 14px;
-    background:#fff;
+    background:#fff; text-align:left; width:100%; font:inherit; color:inherit;
   }
+  .stat-card.clickable{cursor:pointer;transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease;}
+  .stat-card.clickable:hover,.stat-card.clickable:focus-visible{transform:translateY(-2px);box-shadow:0 7px 16px rgba(29,54,96,.12);border-color:var(--accent,#9096a1);outline:none;}
   .stat-card-top{ display:flex; align-items:center; gap:8px; margin-bottom:9px; }
   .stat-card-icon{
     width:24px; height:24px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center;
@@ -495,27 +497,14 @@
         </div>
       </div>
 
-      <div class="spender-note" id="spenderNote" style="display:none;"></div>
-
       <div class="grid2">
-        <div class="panel panel-accent" style="--accent:#1a73e8;--accent-soft:#e8f0fe;">
-          <p class="panel-title"><span class="panel-title-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg></span>Gastos por medio de pago</p>
-          <div class="stat-cards" id="medioCards"></div>
-        </div>
         <div class="panel panel-accent" style="--accent:#1e8e5a;--accent-soft:#e6f4ea;">
           <p class="panel-title"><span class="panel-title-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0 0 7H6"></path><circle cx="9" cy="7" r="4"></circle></svg></span>Gastos por categoría</p>
           <div class="stat-cards" id="personaCards"></div>
         </div>
-      </div>
-
-      <div class="grid2">
         <div class="panel panel-accent" style="--accent:#d93025;--accent-soft:#fce8e6;">
           <p class="panel-title"><span class="panel-title-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg></span>Gastos por persona</p>
           <div class="stat-cards" id="gastoPersonaCards"></div>
-        </div>
-        <div class="panel panel-accent" style="--accent:#1e8e5a;--accent-soft:#e6f4ea;">
-          <p class="panel-title"><span class="panel-title-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"></path><path d="M5 7l-3 6a4 4 0 0 0 6 0z"></path><path d="M19 7l-3 6a4 4 0 0 0 6 0z"></path><path d="M5 7h14"></path></svg></span>Balance por persona <span class="count">ingreso − gasto</span></p>
-          <div class="stat-cards" id="balancePersonaCards"></div>
         </div>
       </div>
     </div>
@@ -699,6 +688,26 @@ const CAT_COLORS = {
   'Transporte':'#7c4dff','Salud':'#1e8e5a','Hogar y mudanza':'#e8710a','Ocio y otros':'#5f6572'
 };
 function catColor(c){ return CAT_COLORS[c] || '#9096a1'; }
+function normalizedText(value){ return String(value||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim(); }
+function canonicalCategory(value){
+  const key=normalizedText(value);
+  const aliases={
+    'vivienda':'Vivienda','servicio':'Servicios','servicios':'Servicios','impuesto':'Impuestos','impuestos':'Impuestos',
+    'alimentacion':'Alimentación','alimento':'Alimentación','transporte':'Transporte','salud':'Salud',
+    'hogar mudanza':'Hogar y mudanza','hogar y mudanza':'Hogar y mudanza','ocio otros':'Ocio y otros','ocio y otros':'Ocio y otros'
+  };
+  return aliases[key] || CATEGORIAS.find(c=>normalizedText(c)===key) || String(value||'').trim() || 'Sin categoría';
+}
+function parseAmount(value){
+  if(typeof value==='number') return Number.isFinite(value) ? value : 0;
+  const raw=String(value??'').trim().replace(/\$/g,'').replace(/\s/g,'');
+  if(!raw) return 0;
+  if(raw.includes(',')) return Number(raw.replace(/\./g,'').replace(',','.')) || 0;
+  return Number(raw.replace(/\.(?=\d{3}(?:\.|$))/g,'')) || 0;
+}
+function normalizeRegistroRow(row){
+  return {...row, fecha:normalizeFecha(row?.fecha), categoria:canonicalCategory(row?.categoria), monto:parseAmount(row?.monto), subcategoria:String(row?.subcategoria||'').trim()||null, descripcion:String(row?.descripcion||'').trim()||null, medio:String(row?.medio||'').trim()||null, fuente:String(row?.fuente||'').trim()||null};
+}
 
 const STAT_ICONS = {
   card: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>',
@@ -764,7 +773,7 @@ async function pullFromSheets(){
   const response=await fetch(url);
   const data=await response.json();
   if(!data.ok) throw new Error(data.error||'No se pudo leer Google Sheets.');
-  if(Array.isArray(data.registro)) REGISTRO=dedupeRegistro(data.registro.map(r=>({...r,fecha:normalizeFecha(r.fecha)})));
+  if(Array.isArray(data.registro)) REGISTRO=dedupeRegistro(data.registro.map(normalizeRegistroRow));
   return data;
 }
 async function saveRegistroToSheets(registro){
@@ -812,16 +821,17 @@ function ingresosPorMes(){
 }
 function gastosPorMes(){
   const arr = new Array(12).fill(0);
-  REGISTRO.forEach(r=>{ if(!r.fecha) return; arr[mesIndexFromDateStr(r.fecha)] += Number(r.monto)||0; });
+  REGISTRO.forEach(r=>{ const mi=mesIndexFromDateStr(r.fecha); if(mi<0) return; arr[mi] += parseAmount(r.monto); });
   return arr;
 }
 function gastosPorMesYCategoria(){
   const map = {};
   CATEGORIAS.forEach(c=> map[c] = new Array(12).fill(0));
   REGISTRO.forEach(r=>{
-    if(!r.fecha || !r.categoria) return;
-    if(!map[r.categoria]) map[r.categoria] = new Array(12).fill(0);
-    map[r.categoria][mesIndexFromDateStr(r.fecha)] += Number(r.monto)||0;
+    const mi=mesIndexFromDateStr(r.fecha); if(mi<0) return;
+    const category=canonicalCategory(r.categoria);
+    if(!map[category]) map[category] = new Array(12).fill(0);
+    map[category][mi] += parseAmount(r.monto);
   });
   return map;
 }
@@ -846,7 +856,7 @@ function personaTotales(monthSel){
 function gastoPorPersonaTotales(rows){
   const map = { 'Lucía':0, 'Juan':0 };
   rows.forEach(r=>{
-    const monto = Number(r.monto)||0;
+    const monto = parseAmount(r.monto);
     if(!monto) return;
     const key = normalizeName(r.fuente||'');
     if(key==='lucia'){ map['Lucía'] += monto; }
@@ -915,14 +925,14 @@ function filteredRegistro(){
     if(!r.fecha) return false;
     const mi = mesIndexFromDateStr(r.fecha);
     if(monthSel!=='all' && String(mi)!==monthSel) return false;
-    if(catSel!=='all' && r.categoria!==catSel) return false;
+    if(catSel!=='all' && canonicalCategory(r.categoria)!==catSel) return false;
     return true;
   });
 }
 function renderResumen(){
   const {monthSel} = currentFilters();
   const rows = filteredRegistro();
-  const gastoTotal = rows.reduce((s,r)=>s+(Number(r.monto)||0),0);
+  const gastoTotal = rows.reduce((s,r)=>s+parseAmount(r.monto),0);
   const categoriasActivas = new Set(rows.map(r=>r.categoria).filter(Boolean)).size;
   const promedio = rows.length ? gastoTotal / rows.length : 0;
 
@@ -943,19 +953,12 @@ function renderResumen(){
     return monthSel==='all' || String(mi)===monthSel;
   });
 
-  const MEDIO_PALETTE = ['#f29900','#1a73e8','#7c4dff','#1e8e5a','#d93025','#12b5b0'];
-  const medioTotals = {};
-  catRows.forEach(r=>{ const m=r.medio||'Sin especificar'; medioTotals[m]=(medioTotals[m]||0)+(Number(r.monto)||0); });
-  const medioEntries = Object.entries(medioTotals).sort((a,b)=>b[1]-a[1]);
-  const medioSum = medioEntries.reduce((s,[,v])=>s+v,0);
-  renderStatCards('medioCards', medioEntries, medioSum, MEDIO_PALETTE, 'Sin gastos registrados en este período.', null, 'card');
-
   const PERSONA_PALETTE = ['#1a73e8','#f29900','#7c4dff','#1e8e5a','#d93025','#12b5b0'];
   const categoryTotals = {};
-  catRows.forEach(r=>{ const c=r.categoria||'Sin categoría'; categoryTotals[c]=(categoryTotals[c]||0)+(Number(r.monto)||0); });
+  catRows.forEach(r=>{ const c=canonicalCategory(r.categoria); categoryTotals[c]=(categoryTotals[c]||0)+parseAmount(r.monto); });
   const pEntries = Object.entries(categoryTotals).sort((a,b)=>b[1]-a[1]);
   const pSum = pEntries.reduce((s,[,v])=>s+v,0);
-  renderStatCards('personaCards', pEntries, pSum, PERSONA_PALETTE, 'Sin gastos registrados en este período.', (label)=>catColor(label), 'card');
+  renderStatCards('personaCards', pEntries, pSum, PERSONA_PALETTE, 'Sin gastos registrados en este período.', (label)=>catColor(label), 'card', openCategoryDetail);
   const personaTitleEl = document.querySelector('#personaCards').closest('.panel').querySelector('.panel-title');
   if(personaTitleEl){
     const iconMatch = personaTitleEl.querySelector('.panel-title-icon');
@@ -969,24 +972,9 @@ function renderResumen(){
   const gpSum = gpEntries.reduce((s,[,v])=>s+v,0);
   renderStatCards('gastoPersonaCards', gpEntries, gpSum, PERSONA_PALETTE, monthSel==='all' ? 'Sin gastos registrados todavía.' : 'Sin gastos registrados en ' + MESES_FULL[Number(monthSel)] + '.', (label)=>getPersonaColor(label), 'person');
 
-  renderBalanceCards('balancePersonaCards', Object.entries(gastoPersona).filter(([,value])=>value>0));
-
-  // Aviso de quién gastó más
-  const spenderNote = document.getElementById('spenderNote');
-  if(spenderNote){
-    if(gpSum>0){
-      const [topName, topVal] = gpEntries[0];
-      const pct = Math.round((topVal/gpSum)*100);
-      const periodo = monthSel==='all' ? 'este año' : 'en ' + MESES_FULL[Number(monthSel)];
-      spenderNote.innerHTML = LIGHTBULB_ICON + '<span>' + esc(topName) + ' fue quien más gastó ' + periodo + ': ' + fmt(topVal) + ' (' + pct + '% del gasto total). Los gastos compartidos se reparten 50/50 entre Lucía y Juan.</span>';
-      spenderNote.style.display = 'flex';
-    } else {
-      spenderNote.style.display = 'none';
-    }
-  }
 }
 
-function renderStatCards(containerId, entries, total, palette, emptyMsg, colorFn, iconType){
+function renderStatCards(containerId, entries, total, palette, emptyMsg, colorFn, iconType, onClick){
   const el = document.getElementById(containerId);
   if(entries.length===0){
     el.className = 'stat-cards empty';
@@ -998,7 +986,7 @@ function renderStatCards(containerId, entries, total, palette, emptyMsg, colorFn
   el.innerHTML = entries.map(([label,value],i)=>{
     const pct = total>0 ? Math.round((value/total)*100) : 0;
     const color = colorFn ? colorFn(label,i) : palette[i % palette.length];
-    return `<div class="stat-card" style="--accent:${color};">
+    return `<button class="stat-card${onClick?' clickable':''}" type="button" ${onClick?`onclick='${onClick.name}(${JSON.stringify(label)})' aria-label="Ver gastos de ${esc(label)}"`:''} style="--accent:${color};">
       <div class="stat-card-top">
         <span class="stat-card-icon">${iconSvg}</span>
         <span class="stat-card-name">${esc(label)}</span>
@@ -1006,8 +994,19 @@ function renderStatCards(containerId, entries, total, palette, emptyMsg, colorFn
       <div class="stat-card-value">${fmt(value)}</div>
       <div class="stat-card-pct">${pct}% del total</div>
       <div class="stat-card-bar-bg"><div class="stat-card-bar-fill" style="width:${Math.min(100,pct)}%;"></div></div>
-    </div>`;
+    </button>`;
   }).join('');
+}
+
+function openCategoryDetail(category){
+  const {monthSel}=currentFilters();
+  document.getElementById('monthSelect2').value=monthSel;
+  document.getElementById('catSelect2').value=canonicalCategory(category);
+  document.getElementById('searchBox').value='';
+  window.registroPaymentFilter='all';
+  document.querySelectorAll('.payment-tab').forEach((el,index)=>el.classList.toggle('active',index===0));
+  document.querySelector('.tab[data-tab="registro"]').click();
+  renderRegistroTab();
 }
 
 /* ============ REGISTRO TAB ============ */
@@ -1386,7 +1385,7 @@ function filteredRegistroTab(){
     if(!r.fecha) return false;
     const mi = mesIndexFromDateStr(r.fecha);
     if(monthSel!=='all' && String(mi)!==monthSel) return false;
-    if(catSel!=='all' && r.categoria!==catSel) return false;
+    if(catSel!=='all' && canonicalCategory(r.categoria)!==catSel) return false;
     const medio = String(r.medio||'').toLowerCase();
     if(paymentSel==='cash' && !medio.includes('efectivo')) return false;
     if(paymentSel==='transfer' && !medio.includes('transfer')) return false;
@@ -1454,7 +1453,7 @@ function renderRegistroTab(){
   const rows = filteredRegistroTab();
   document.getElementById('tableCount').textContent = '(' + rows.length + ')';
   document.getElementById('registroMovementCount').textContent = rows.length;
-  document.getElementById('registroSpentTotal').textContent = fmt(rows.reduce((sum,r)=>sum+(Number(r.monto)||0),0));
+  document.getElementById('registroSpentTotal').textContent = fmt(rows.reduce((sum,r)=>sum+parseAmount(r.monto),0));
   const tableWrap = document.getElementById('tableWrap');
   if(rows.length===0){
     tableWrap.innerHTML = '<div class="empty-note">No hay movimientos que coincidan con el filtro elegido.</div>';
@@ -1613,7 +1612,7 @@ document.getElementById('fileInput').addEventListener('change', function(e){
         if(fecha==null && (monto==null || monto==='')) return;
         const iso = excelDateToISO(fecha);
         if(!iso) return;
-        newRegistro.push({ fecha: normalizeFecha(iso), categoria: cat||null, subcategoria: sub||null, descripcion: desc||null, monto: Number(monto)||0, medio: medio||null, fuente: fuente||null });
+        newRegistro.push(normalizeRegistroRow({ fecha: iso, categoria: cat, subcategoria: sub, descripcion: desc, monto, medio, fuente }));
       });
 
       const wsPres = wb.Sheets['Presupuesto'];
@@ -1660,7 +1659,7 @@ document.getElementById('fileInput').addEventListener('change', function(e){
     await waitForFirebase();
     const cloudData = await window.dbLoadDashboard();
     if(cloudData){
-      if(Array.isArray(cloudData.REGISTRO)) REGISTRO = cloudData.REGISTRO;
+      if(Array.isArray(cloudData.REGISTRO)) REGISTRO = dedupeRegistro(cloudData.REGISTRO.map(normalizeRegistroRow));
       if(Array.isArray(cloudData.PRESUPUESTO)) PRESUPUESTO = cloudData.PRESUPUESTO;
       if(Array.isArray(cloudData.SUPERMERCADO)){ SUPERMERCADO = cloudData.SUPERMERCADO; persistMarketData(); }
       setCloudStatus('☁ sincronizado', 'ok');
