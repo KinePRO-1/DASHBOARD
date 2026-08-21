@@ -336,6 +336,10 @@
   .price-history{display:flex;flex-wrap:wrap;gap:5px;}
   .price-history-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 6px;border-radius:6px;background:#f3f6fb;color:#40506e;font-size:11px;white-space:nowrap;}
   .price-history-chip.best{background:#e9f8ee;color:#147443;font-weight:700;}
+  .recommendation-alt{margin-top:6px;padding-top:6px;border-top:1px dashed var(--border);}
+  .recommendation-alt-label{color:#8a6d1f;font-size:11.5px;font-weight:600;margin-bottom:3px;}
+  .price-history-chip.alt{background:#fbf3e0;color:#8a6d1f;}
+  .price-history-chip.alt.best{background:#f6e6bd;color:#6d5215;font-weight:700;}
   .ticket-kpis,.market-store-summary{display:none;}
   @media(max-width:560px){.ticket-kpis{grid-template-columns:1fr;}.field-grid{grid-template-columns:1fr;}.wrap{padding:0 14px 40px;}.topbar{padding:16px 14px;}.tabbar{padding:0 14px;}.top-actions{width:100%;justify-content:space-between;}.upload-status{text-align:left;}.upload-btn{font-size:12px;padding:8px 10px;}}
   .ticket-entry-panel{padding:16px!important;border-radius:14px!important;border-color:#dbe3f0!important;box-shadow:0 5px 16px rgba(34,56,103,.07)!important;}
@@ -1083,6 +1087,7 @@ const MARKET_STORAGE_KEY = 'jyl_supermercado_v1';
 const MARKET_SEQ_KEY = 'jyl_supermercado_seq_v1';
 const MARKET_IMAGES_KEY = 'jyl_supermercado_imagenes_v1';
 const MARKET_ALIASES_KEY = 'jyl_supermercado_aliases_v1';
+const MARKET_ALIAS_TYPES_KEY = 'jyl_supermercado_alias_types_v1';
 const MARKET_FIREBASE_CONFIG = {
   apiKey:'AIzaSyDK65pQpjde-51hQPCFog_lv2COh9v2e40',
   authDomain:'dashboard-1844f.firebaseapp.com',
@@ -1094,6 +1099,7 @@ const MARKET_FIREBASE_CONFIG = {
 let SUPERMERCADO = [];
 let PRODUCT_IMAGES = {};
 let PRODUCT_ALIASES = {};
+let PRODUCT_ALIAS_TYPES = {};
 let MARKET_FIRESTORE_REF = null;
 let MARKET_FIREBASE_READY = false;
 let MARKET_CLOUD_APPLYING = false;
@@ -1167,11 +1173,28 @@ function queueTicketTextImport(){
   },0);
 }
 function cleanProduct(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\b(kg|gr|g|un|u|x)\b/g,' ').replace(/\s+/g,' ').trim(); }
+// Heurística de marca: en general el nombre viene como "Producto detalle - Marca".
+// Si no hay separador " - ", se toma la última palabra significativa como aproximación de marca.
+function guessBrand(producto){
+  const raw=String(producto||'').trim();
+  if(!raw) return '';
+  const dashParts=raw.split(/\s+-\s+/);
+  if(dashParts.length>1) return cleanMatch(dashParts[dashParts.length-1]);
+  const words=raw.split(/\s+/).filter(Boolean);
+  if(!words.length) return '';
+  return cleanMatch(words[words.length-1]);
+}
+function sameBrand(a,b){
+  const brandA=guessBrand(a), brandB=guessBrand(b);
+  if(!brandA || !brandB) return true; // si no podemos determinar marca, no bloqueamos, solo no distinguimos
+  return brandA===brandB;
+}
 function nextOrden(){ let n = Number(localStorage.getItem(MARKET_SEQ_KEY)||'0') + 1; localStorage.setItem(MARKET_SEQ_KEY, String(n)); return n; }
 function loadMarketData(){
   try{ SUPERMERCADO = JSON.parse(localStorage.getItem(MARKET_STORAGE_KEY)||'[]'); if(!Array.isArray(SUPERMERCADO)) SUPERMERCADO=[]; }catch(e){ SUPERMERCADO=[]; }
   try{ PRODUCT_IMAGES = JSON.parse(localStorage.getItem(MARKET_IMAGES_KEY)||'{}'); if(!PRODUCT_IMAGES||typeof PRODUCT_IMAGES!=='object') PRODUCT_IMAGES={}; }catch(e){ PRODUCT_IMAGES={}; }
   try{ PRODUCT_ALIASES = JSON.parse(localStorage.getItem(MARKET_ALIASES_KEY)||'{}'); if(!PRODUCT_ALIASES||typeof PRODUCT_ALIASES!=='object') PRODUCT_ALIASES={}; }catch(e){ PRODUCT_ALIASES={}; }
+  try{ PRODUCT_ALIAS_TYPES = JSON.parse(localStorage.getItem(MARKET_ALIAS_TYPES_KEY)||'{}'); if(!PRODUCT_ALIAS_TYPES||typeof PRODUCT_ALIAS_TYPES!=='object') PRODUCT_ALIAS_TYPES={}; }catch(e){ PRODUCT_ALIAS_TYPES={}; }
   let changed=false;
   SUPERMERCADO.forEach(t=>{ if(!t.orden){ t.orden=nextOrden(); changed=true; } if(!t.huella){ t.huella=ticketFingerprint(t); changed=true; } });
   if(changed) persistMarketData();
@@ -1187,6 +1210,7 @@ function marketCloudPayload(){
     compras:SUPERMERCADO,
     imagenes:PRODUCT_IMAGES,
     asociaciones:PRODUCT_ALIASES,
+    tiposAsociacion:PRODUCT_ALIAS_TYPES,
     secuencia:Number(localStorage.getItem(MARKET_SEQ_KEY)||0),
     actualizadoEl:firebase.firestore.FieldValue.serverTimestamp()
   };
@@ -1197,9 +1221,11 @@ function applyMarketCloudData(data){
   SUPERMERCADO=Array.isArray(data.compras)?data.compras:[];
   PRODUCT_IMAGES=data.imagenes&&typeof data.imagenes==='object'?data.imagenes:{};
   PRODUCT_ALIASES=data.asociaciones&&typeof data.asociaciones==='object'?data.asociaciones:{};
+  PRODUCT_ALIAS_TYPES=data.tiposAsociacion&&typeof data.tiposAsociacion==='object'?data.tiposAsociacion:{};
   localStorage.setItem(MARKET_STORAGE_KEY,JSON.stringify(SUPERMERCADO));
   localStorage.setItem(MARKET_IMAGES_KEY,JSON.stringify(PRODUCT_IMAGES));
   localStorage.setItem(MARKET_ALIASES_KEY,JSON.stringify(PRODUCT_ALIASES));
+  localStorage.setItem(MARKET_ALIAS_TYPES_KEY,JSON.stringify(PRODUCT_ALIAS_TYPES));
   const maxOrder=Math.max(Number(data.secuencia)||0,...SUPERMERCADO.map(t=>Number(t.orden)||0),0);
   localStorage.setItem(MARKET_SEQ_KEY,String(maxOrder));
   MARKET_CLOUD_APPLYING=false;
@@ -1250,7 +1276,9 @@ async function initMarketFirebase(){
 }
 function persistMarketData(){ localStorage.setItem(MARKET_STORAGE_KEY, JSON.stringify(SUPERMERCADO)); queueMarketFirebaseSave(); }
 function persistProductImages(){ localStorage.setItem(MARKET_IMAGES_KEY, JSON.stringify(PRODUCT_IMAGES)); queueMarketFirebaseSave(); }
-function persistProductAliases(){ localStorage.setItem(MARKET_ALIASES_KEY, JSON.stringify(PRODUCT_ALIASES)); queueMarketFirebaseSave(); }
+function persistProductAliases(){ localStorage.setItem(MARKET_ALIASES_KEY, JSON.stringify(PRODUCT_ALIASES)); localStorage.setItem(MARKET_ALIAS_TYPES_KEY, JSON.stringify(PRODUCT_ALIAS_TYPES)); queueMarketFirebaseSave(); }
+// Devuelve 'alternativa' si el key fue asociado explícitamente a un producto de otra marca, si no 'mismo'.
+function aliasType(key){ return PRODUCT_ALIAS_TYPES[key]||'mismo'; }
 function resolveProductKey(producto){
   let key=cleanProduct(producto), steps=0;
   while(key && PRODUCT_ALIASES[key] && PRODUCT_ALIASES[key]!==key && steps<30){ key=PRODUCT_ALIASES[key]; steps++; }
@@ -1457,7 +1485,11 @@ function productPurchases(producto, excludeId){
   return SUPERMERCADO.flatMap(t=>(t.items||[]).map(i=>{
     const quantity=Number(i.cantidad)||1;
     const unit=Number(i.precioUnitario)||((Number(i.total)||0)/quantity);
-    return {producto:i.producto,precio:unit,fecha:t.fecha,ticketId:t.id,orden:Number(t.orden)||0,comercio:(t.comercio||'Supermercado').trim()||'Supermercado'};
+    const itemKey=cleanProduct(i.producto);
+    // El ítem se considera "alternativa" (otra marca) si el paso de asociación desde su propio
+    // nombre hacia el producto canónico fue marcado explícitamente como cross-marca.
+    const tipo=(itemKey!==key && aliasType(itemKey)==='alternativa') ? 'alternativa' : 'mismo';
+    return {producto:i.producto,precio:unit,fecha:t.fecha,ticketId:t.id,orden:Number(t.orden)||0,comercio:(t.comercio||'Supermercado').trim()||'Supermercado',tipo};
   })).filter(i=>i.ticketId!==excludeId && resolveProductKey(i.producto)===key && Number.isFinite(i.precio) && i.precio>0)
     .sort((a,b)=>dateKey(b.fecha).localeCompare(dateKey(a.fecha)) || b.orden-a.orden);
 }
@@ -1465,6 +1497,15 @@ function latestPricesByStore(producto, excludeId){
   const latest={};
   productPurchases(producto,excludeId).forEach(p=>{ if(!latest[p.comercio]) latest[p.comercio]=p; });
   return Object.values(latest).sort((a,b)=>a.precio-b.precio || a.comercio.localeCompare(b.comercio,'es'));
+}
+// Separa los últimos precios por tienda en "mismo producto/marca" vs. "alternativa de otra marca",
+// para no mezclar en una sola comparación cosas que no son estrictamente el mismo artículo.
+function latestPricesGrouped(producto, excludeId){
+  const all=latestPricesByStore(producto,excludeId);
+  return {
+    mismo: all.filter(p=>p.tipo!=='alternativa').sort((a,b)=>a.precio-b.precio || a.comercio.localeCompare(b.comercio,'es')),
+    alternativa: all.filter(p=>p.tipo==='alternativa').sort((a,b)=>a.precio-b.precio || a.comercio.localeCompare(b.comercio,'es'))
+  };
 }
 function previousPriceAtStore(producto, comercio, excludeId){
   return productPurchases(producto,excludeId).find(p=>cleanMatch(p.comercio)===cleanMatch(comercio))||null;
@@ -1478,13 +1519,25 @@ function comparisonHtml(producto, precio, ticketId, comercio){
   return `<span class="${dif>0?'comparison-up':'comparison-down'}">${dif>0?'↑':'↓'} ${Math.abs(pct)}% (${dif>0?'+':''}${fmt(dif)})</span>`;
 }
 function productRecommendationHtml(producto){
-  const prices=latestPricesByStore(producto);
-  if(!prices.length) return '<span class="comparison-new">Sin historial suficiente</span>';
-  const best=prices[0], others=prices.slice(1);
-  const latestDate=new Date(best.fecha+'T12:00:00').toLocaleDateString('es-AR');
-  const extra=others.length ? ` · Ahorro frente a ${esc(others[0].comercio)}: ${fmt(others[0].precio-best.precio)}` : '';
-  const chips=prices.map((p,index)=>`<span class="price-history-chip${index===0?' best':''}">${esc(p.comercio)}: ${fmt(p.precio)}</span>`).join('');
-  return `<div class="recommendation"><div class="recommendation-main">Recomprar en ${esc(best.comercio)} · ${fmt(best.precio)}</div><div class="recommendation-detail">Último precio: ${latestDate}${extra}</div><div class="price-history">${chips}</div></div>`;
+  const {mismo,alternativa}=latestPricesGrouped(producto);
+  if(!mismo.length && !alternativa.length) return '<span class="comparison-new">Sin historial suficiente</span>';
+  let html='<div class="recommendation">';
+  if(mismo.length){
+    const best=mismo[0], others=mismo.slice(1);
+    const latestDate=new Date(best.fecha+'T12:00:00').toLocaleDateString('es-AR');
+    const extra=others.length ? ` · Ahorro frente a ${esc(others[0].comercio)}: ${fmt(others[0].precio-best.precio)}` : '';
+    const chips=mismo.map((p,index)=>`<span class="price-history-chip${index===0?' best':''}">${esc(p.comercio)}: ${fmt(p.precio)}</span>`).join('');
+    html+=`<div class="recommendation-main">Recomprar en ${esc(best.comercio)} · ${fmt(best.precio)}</div><div class="recommendation-detail">Último precio: ${latestDate}${extra}</div><div class="price-history">${chips}</div>`;
+  }else{
+    html+='<div class="comparison-new">Sin precio de este producto exacto todavía</div>';
+  }
+  if(alternativa.length){
+    const bestAlt=alternativa[0];
+    const chipsAlt=alternativa.map((p,index)=>`<span class="price-history-chip alt${index===0?' best':''}">${esc(p.comercio)}: ${fmt(p.precio)}</span>`).join('');
+    html+=`<div class="recommendation-alt"><div class="recommendation-alt-label">Alternativas de otra marca · desde ${fmt(bestAlt.precio)} en ${esc(bestAlt.comercio)}</div><div class="price-history">${chipsAlt}</div></div>`;
+  }
+  html+='</div>';
+  return html;
 }
 function allCanonicalProducts(){
   const products={};
@@ -1503,8 +1556,17 @@ function toggleAssociationEditor(producto){ associationEditorKey=associationEdit
 function associateProductGroup(sourceKey, select){
   const source=resolveProductKey(sourceKey), target=resolveProductKey(select.value);
   if(!source || !target || source===target){ associationEditorKey=null; renderProductCatalog(); return; }
+  const sourceName=(allCanonicalProducts().find(([k])=>k===source)||[])[1]||sourceKey;
+  const targetName=(allCanonicalProducts().find(([k])=>k===target)||[])[1]||select.value;
+  const crossBrand=!sameBrand(sourceName,targetName);
+  if(crossBrand){
+    const brandA=guessBrand(sourceName)||'sin marca detectada', brandB=guessBrand(targetName)||'sin marca detectada';
+    const ok=confirm(`Estás asociando productos de marcas distintas:\n"${sourceName}" (${brandA})\ncon\n"${targetName}" (${brandB}).\n\nSe van a tratar como ALTERNATIVAS equivalentes, no como el mismo producto exacto, y se mostrarán por separado en la comparación de precios.\n\n¿Confirmás la asociación?`);
+    if(!ok) return;
+  }
   Object.keys(PRODUCT_ALIASES).forEach(key=>{ if(resolveProductKey(key)===source) PRODUCT_ALIASES[key]=target; });
   PRODUCT_ALIASES[source]=target;
+  PRODUCT_ALIAS_TYPES[source]=crossBrand?'alternativa':'mismo';
   if(PRODUCT_IMAGES[source] && !PRODUCT_IMAGES[target]) PRODUCT_IMAGES[target]=PRODUCT_IMAGES[source];
   delete PRODUCT_IMAGES[source];
   persistProductAliases(); persistProductImages();
@@ -1514,9 +1576,12 @@ function associateProductGroup(sourceKey, select){
 function associationEditorHtml(producto){
   const source=resolveProductKey(producto);
   if(associationEditorKey!==source) return '';
-  const options=allCanonicalProducts().filter(([key])=>key!==source).map(([key,name])=>`<option value="${esc(key)}">${esc(name)}</option>`).join('');
+  const options=allCanonicalProducts().filter(([key])=>key!==source).map(([key,name])=>{
+    const crossBrand=!sameBrand(producto,name);
+    return `<option value="${esc(key)}">${esc(name)}${crossBrand?' (otra marca)':''}</option>`;
+  }).join('');
   if(!options) return '<span class="product-variants">No hay otro producto disponible para asociar.</span>';
-  return `<div class="association-editor"><select aria-label="Producto al que asociar"><option value="">Elegir producto equivalente</option>${options}</select><button class="btn" type="button" data-source="${esc(source)}" onclick="associateProductGroup(this.dataset.source,this.previousElementSibling)">Asociar</button></div>`;
+  return `<div class="association-editor"><select aria-label="Producto al que asociar"><option value="">Elegir producto equivalente</option>${options}</select><button class="btn" type="button" data-source="${esc(source)}" onclick="associateProductGroup(this.dataset.source,this.previousElementSibling)">Asociar</button><span class="product-variants">Las opciones marcadas "(otra marca)" se guardan como alternativa, no como el mismo producto.</span></div>`;
 }
 function productNameCellHtml(producto){
   const variants=productVariants(producto);
