@@ -330,6 +330,7 @@
   .association-editor{margin-top:7px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
   .association-editor select{max-width:225px;padding:5px 7px;border:1px solid var(--border);border-radius:6px;background:#fff;font:inherit;font-size:11.5px;}
   .comparison-up{color:var(--red);font-weight:600;}.comparison-down{color:var(--green);font-weight:600;}.comparison-same{color:var(--text-3);}.comparison-new{color:var(--blue);}
+  .unit-price{font-size:11px;color:var(--text-3);margin-top:3px;white-space:nowrap;}.stale-warning{color:#9a6500;font-weight:700;font-size:11px;}.trend{font-size:11px;font-weight:700;white-space:nowrap;}.trend.up{color:var(--red);}.trend.down{color:var(--green);}.trend.flat{color:var(--text-3);}.sparkline{vertical-align:middle;margin-left:4px;}.discount-note{display:block;margin-top:3px;color:#147443;font-size:11px;font-weight:700;}.market-tools{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin:-4px 0 14px;font-size:12px;color:var(--text-2);}.market-tools input[type=number]{width:58px;padding:5px;border:1px solid var(--border);border-radius:6px;font:inherit;}.market-check{display:flex;align-items:center;gap:6px;}.shopping-optimizer textarea{width:100%;min-height:82px;resize:vertical;padding:9px;border:1px solid var(--border);border-radius:8px;font:inherit;font-size:12px;}.shopping-optimizer-actions{display:flex;align-items:end;gap:10px;flex-wrap:wrap;margin-top:9px;}.shopping-optimizer-actions label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--text-3);}.shopping-optimizer-actions input{height:34px;padding:0 8px;border:1px solid var(--border);border-radius:7px;font:inherit;}.shopping-result{margin-top:12px;font-size:12px;line-height:1.45;}.shopping-result strong{color:#0d7441;}.shopping-result ul{margin:7px 0 0;padding-left:18px;}
   .recommendation{display:flex;flex-direction:column;gap:4px;min-width:190px;}
   .recommendation-main{color:#0d7441;font-weight:700;line-height:1.3;}
   .recommendation-detail{color:var(--text-3);font-size:11.5px;line-height:1.35;}
@@ -648,9 +649,20 @@
             <div class="catalog-filter"><label for="catalogStoreFilter">Supermercado</label><span class="catalog-filter-icon" aria-hidden="true">▣</span><select id="catalogStoreFilter" onchange="renderProductCatalog()"><option value="all">Todos los supermercados</option></select></div>
             <div class="catalog-filter catalog-sort-filter"><label for="catalogSortFilter">Ordenar</label><span class="catalog-filter-icon" aria-hidden="true">↕</span><select id="catalogSortFilter" onchange="renderProductCatalog()"><option value="name">Nombre</option><option value="priceAsc">Menor precio</option><option value="priceDesc">Mayor precio</option></select></div>
           </div>
+          <div class="market-tools">
+            <label>Precio desactualizado después de <input id="staleDaysInput" type="number" min="1" max="365" value="25" onchange="setStaleDays(this.value)"> días</label>
+            <label class="market-check"><input id="genericSubstitutesToggle" type="checkbox" onchange="renderProductCatalog()"> Mostrar sustitutos genéricos opcionales</label>
+          </div>
           <div id="productCatalog"></div>
         </div>
       </details>
+      <section class="panel shopping-optimizer" style="margin-top:14px;">
+        <p class="panel-title">Optimizar lista de compras</p>
+        <p class="hint">Escribí un producto por línea. Compara el último precio vigente por supermercado y calcula si dividir la compra compensa el viaje adicional.</p>
+        <textarea id="shoppingListInput" placeholder="Ej. leche la serenisima 1 l&#10;yerba 1 kg&#10;papel higiénico"></textarea>
+        <div class="shopping-optimizer-actions"><label>Costo del viaje extra <input id="extraTripCost" type="number" min="0" value="0"></label><button class="btn primary" type="button" onclick="optimizeShoppingList()">Optimizar lista</button></div>
+        <div id="shoppingOptimizerResult" class="shopping-result"></div>
+      </section>
       <div class="table-panel" style="margin-top:14px;">
         <p class="panel-title">Compras registradas <span class="count" id="comprasCount"></span></p>
         <div class="filters" style="margin-bottom:12px;">
@@ -1134,20 +1146,23 @@ function parseTicketText(text){
   const items=sections.map(match=>{
     const producto=match[1].trim();
     const lines=match[2].replace(/\*\*/g,'').split(/\*\s*/).map(line=>line.trim()).filter(Boolean);
-    const quantityLine=lines.find(line=>/\d\s*(?:g|gr|kg|unidad(?:es)?|un(?:idad)?(?:es)?|u)\b/i.test(line))||'';
-    const priceLine=lines.find(line=>/\$\s*[\d.,]+\s*\/\s*(?:kg|unidad(?:es)?|un(?:idad)?(?:es)?|u)\b/i.test(line))||'';
-    const moneyLines=lines.filter(line=>/\$\s*[\d.,]+/.test(line));
+    const quantityLine=lines.find(line=>/\d\s*(?:g|gr|kg|ml|l|lt|litro(?:s)?|unidad(?:es)?|un(?:idad)?(?:es)?|u)\b/i.test(line))||'';
+    const priceLine=lines.find(line=>/\$\s*[\d.,]+\s*\/\s*(?:kg|l|lt|litro(?:s)?|unidad(?:es)?|un(?:idad)?(?:es)?|u)\b/i.test(line))||'';
+    const moneyLines=lines.filter(line=>/\$\s*[\d.,]+/.test(line) && !/(?:descuento|dto\.?|dcto\.?|ahorro|bonific)/i.test(line));
     const total=currencyFromText(moneyLines[moneyLines.length-1]);
-    const q=quantityLine.match(/([\d.,]+)\s*(kg|g|gr|unidad(?:es)?|un(?:idad)?(?:es)?|u)\b/i);
+    const q=quantityLine.match(/([\d.,]+)\s*(kg|g|gr|ml|l|lt|litro(?:s)?|unidad(?:es)?|un(?:idad)?(?:es)?|u)\b/i);
     let cantidad=1, unidad='un';
     if(q){
       cantidad=numInput(q[1]);
       const measure=q[2].toLowerCase();
       if(measure==='g'||measure==='gr'){ cantidad=cantidad/1000; unidad='kg'; }
       else if(measure==='kg'){ unidad='kg'; }
+      else if(measure==='ml'){ cantidad=cantidad/1000; unidad='l'; }
+      else if(/^(l|lt|litro|litros)$/.test(measure)){ unidad='l'; }
     }
     const precioUnitario=currencyFromText(priceLine)|| (cantidad ? total/cantidad : total);
-    return {producto,cantidad,unidad,precioUnitario,total};
+    const descuentos=lines.filter(line=>/(?:descuento|dto\.?|dcto\.?|ahorro|bonific)/i.test(line)).reduce((sum,line)=>sum+currencyFromText(line),0);
+    return {producto,cantidad,unidad,precioUnitario,total,descuento:descuentos,precioLista:descuentos?total+descuentos:0};
   }).filter(item=>item.producto&&item.total>0);
   const ticketMatch=source.match(/(?:n[.ºo°]?\s*(?:de)?\s*(?:ticket|comprobante)|ticket|comprobante|p\.?v\.?\s*n[.ºo°]?|n[.ºo°]?\s*(?:op|ticket))\s*[:#-]?\s*([a-z0-9][a-z0-9\/-]{2,})/i);
   return {fecha,items,total:currencyFromText(source.match(/#{1,3}\s*Total[\s\S]*?\*\*\s*\$\s*([\d.,]+)/i)?.[0]),numero:ticketMatch?.[1]||''};
@@ -1458,13 +1473,13 @@ function syncMarketToRegistro(){
   // se guardan allí antes de entrar al cálculo, evitando duplicados al recargar.
 }
 function ticketRowId(){ return 't_'+Date.now()+'_'+Math.random().toString(36).slice(2,7); }
-function addTicketLine(line={}){ ticketDraft.push({id:ticketRowId(),producto:line.producto||'',cantidad:line.cantidad||1,unidad:line.unidad||'un',precioUnitario:line.precioUnitario||'',total:line.total||'',imagen:line.imagen||''}); renderTicketLines(); }
+function addTicketLine(line={}){ ticketDraft.push({id:ticketRowId(),producto:line.producto||'',cantidad:line.cantidad||1,unidad:line.unidad||'un',precioUnitario:line.precioUnitario||'',total:line.total||'',descuento:line.descuento||0,precioLista:line.precioLista||0,imagen:line.imagen||''}); renderTicketLines(); }
 function removeTicketLine(id){ ticketDraft=ticketDraft.filter(x=>x.id!==id); renderTicketLines(); }
 function updateTicketLine(id, field, value){ const row=ticketDraft.find(x=>x.id===id); if(!row) return; row[field]=value; if(field==='cantidad'||field==='precioUnitario'){ const q=numInput(row.cantidad); const p=moneyInput(row.precioUnitario); if(q&&p) row.total=Math.round(q*p); } renderTicketLines(); }
 function renderTicketLines(){
   const wrap=document.getElementById('ticketLines');
   if(!ticketDraft.length){ wrap.innerHTML='<div class="empty-note">Agregá productos manualmente, pegá una compra en texto o leé una foto del ticket.</div>'; document.getElementById('ticketDraftTotal').textContent='$0'; return; }
-  let total=0, html='<table><thead><tr><th>Imagen</th><th>Producto</th><th>Cant.</th><th>Unidad</th><th>Precio unit.</th><th>Total</th><th></th></tr></thead><tbody>';
+  let total=0, html='<table><thead><tr><th>Imagen</th><th>Producto</th><th>Cant.</th><th>Unidad</th><th>Precio unit.</th><th>Descuento</th><th>Total final</th><th></th></tr></thead><tbody>';
   ticketDraft.forEach(r=>{
     const rowTotal=moneyInput(r.total) || Math.round(numInput(r.cantidad)*moneyInput(r.precioUnitario)); total+=rowTotal;
     html+=`<tr>
@@ -1473,29 +1488,45 @@ function renderTicketLines(){
       <td><input type="number" min="0" step="0.001" value="${esc(r.cantidad)}" onchange="updateTicketLine('${r.id}','cantidad',this.value)"></td>
       <td><input value="${esc(r.unidad)}" onchange="updateTicketLine('${r.id}','unidad',this.value)"></td>
       <td><input type="number" min="0" step="0.01" value="${esc(r.precioUnitario)}" onchange="updateTicketLine('${r.id}','precioUnitario',this.value)"></td>
-      <td class="monto">${fmt(rowTotal)}</td>
+      <td><input type="number" min="0" step="0.01" value="${esc(r.descuento||'')}" placeholder="0" onchange="updateTicketLine('${r.id}','descuento',this.value)"></td>
+      <td class="monto">${fmt(rowTotal)}${moneyInput(r.descuento)?`<span class="discount-note">Ahorraste ${fmt(moneyInput(r.descuento))}</span>`:''}</td>
       <td><button class="btn danger" type="button" onclick="removeTicketLine('${r.id}')">×</button></td>
     </tr>`;
   });
   wrap.innerHTML=html+'</tbody></table>'; document.getElementById('ticketDraftTotal').textContent=fmt(total);
 }
+let MARKET_STALE_DAYS=Number(localStorage.getItem('jyl_market_stale_days')||25);
+function setStaleDays(value){ MARKET_STALE_DAYS=Math.max(1,Number(value)||25); localStorage.setItem('jyl_market_stale_days',MARKET_STALE_DAYS); renderProductCatalog(); }
+function measurementInfo(item){
+  const raw=String(item.unidad||'un').toLowerCase().trim(); let qty=Number(item.cantidad)||1, label='unidad';
+  if(/^(kg|kilo|kilos)$/.test(raw)){ label='kg'; }
+  else if(/^(g|gr|gramo|gramos)$/.test(raw)){ qty=qty/1000; label='kg'; }
+  else if(/^(l|lt|litro|litros)$/.test(raw)){ label='L'; }
+  else if(/^(ml|cc)$/.test(raw)){ qty=qty/1000; label='L'; }
+  else { label='unidad'; }
+  return {qty:qty||1,label};
+}
+function unitPriceOf(item){ const m=measurementInfo(item); return (Number(item.total||0)||((Number(item.precioUnitario)||0)*m.qty))/m.qty; }
+function unitPriceLabel(item){ const m=measurementInfo(item); return `${fmt(unitPriceOf(item))}/${m.label==='unidad'?'unidad':m.label}`; }
+function ageInDays(date){ return Math.max(0,Math.floor((new Date(todayISO()+'T12:00:00')-new Date(String(date||todayISO())+'T12:00:00'))/86400000)); }
+function staleHtml(date){ const days=ageInDays(date); return days>MARKET_STALE_DAYS?`<span class="stale-warning" title="Precio registrado hace ${days} días">⚠ ${days} días</span>`:''; }
 function productPurchases(producto, excludeId){
   const key=resolveProductKey(producto);
   if(!key) return [];
   return SUPERMERCADO.flatMap(t=>(t.items||[]).map(i=>{
-    const quantity=Number(i.cantidad)||1;
-    const unit=Number(i.precioUnitario)||((Number(i.total)||0)/quantity);
+    const measure=measurementInfo(i);
+    const unit=unitPriceOf(i);
     const itemKey=cleanProduct(i.producto);
     // El ítem se considera "alternativa" (otra marca) si el paso de asociación desde su propio
     // nombre hacia el producto canónico fue marcado explícitamente como cross-marca.
     const tipo=(itemKey!==key && aliasType(itemKey)==='alternativa') ? 'alternativa' : 'mismo';
-    return {producto:i.producto,precio:unit,fecha:t.fecha,ticketId:t.id,orden:Number(t.orden)||0,comercio:(t.comercio||'Supermercado').trim()||'Supermercado',tipo};
+    return {producto:i.producto,precio:unit,medida:measure.label,fecha:t.fecha,ticketId:t.id,orden:Number(t.orden)||0,comercio:(t.comercio||'Supermercado').trim()||'Supermercado',tipo};
   })).filter(i=>i.ticketId!==excludeId && resolveProductKey(i.producto)===key && Number.isFinite(i.precio) && i.precio>0)
     .sort((a,b)=>dateKey(b.fecha).localeCompare(dateKey(a.fecha)) || b.orden-a.orden);
 }
 function latestPricesByStore(producto, excludeId){
   const latest={};
-  productPurchases(producto,excludeId).forEach(p=>{ if(!latest[p.comercio]) latest[p.comercio]=p; });
+  productPurchases(producto,excludeId).forEach(p=>{ const storeKey=p.comercio+'|'+p.medida; if(!latest[storeKey]) latest[storeKey]=p; });
   return Object.values(latest).sort((a,b)=>a.precio-b.precio || a.comercio.localeCompare(b.comercio,'es'));
 }
 // Separa los últimos precios por tienda en "mismo producto/marca" vs. "alternativa de otra marca",
@@ -1510,6 +1541,14 @@ function latestPricesGrouped(producto, excludeId){
 function previousPriceAtStore(producto, comercio, excludeId){
   return productPurchases(producto,excludeId).find(p=>cleanMatch(p.comercio)===cleanMatch(comercio))||null;
 }
+function trendHtml(producto, comercio){
+  const history=productPurchases(producto).filter(p=>!comercio||cleanMatch(p.comercio)===cleanMatch(comercio)).slice(0,6).reverse();
+  if(history.length<2) return '<span class="trend flat">Sin tendencia</span>';
+  const first=history[0].precio,last=history[history.length-1].precio,dif=last-first,pct=first?Math.round(dif/first*100):0;
+  const vals=history.map(h=>h.precio), min=Math.min(...vals), max=Math.max(...vals), width=42, height=14;
+  const points=vals.map((v,i)=>`${i*(width/(vals.length-1))},${height-2-((v-min)/(max-min||1))*(height-4)}`).join(' ');
+  return `<span class="trend ${dif>0?'up':dif<0?'down':'flat'}">${dif>0?'↑':dif<0?'↓':'→'} ${Math.abs(pct)}%<svg class="sparkline" width="42" height="14" viewBox="0 0 42 14" aria-label="Tendencia"><polyline points="${points}" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></span>`;
+}
 function comparisonHtml(producto, precio, ticketId, comercio){
   const prev=comercio ? previousPriceAtStore(producto,comercio,ticketId) : productPurchases(producto,ticketId)[0];
   if(!prev) return `<span class="comparison-new">${comercio?'Primera compra aquí':'Primera compra'}</span>`;
@@ -1517,6 +1556,15 @@ function comparisonHtml(producto, precio, ticketId, comercio){
   if(Math.abs(dif)<.01) return '<span class="comparison-same">Sin cambio</span>';
   const pct=Math.round((dif/Number(prev.precio))*100);
   return `<span class="${dif>0?'comparison-up':'comparison-down'}">${dif>0?'↑':'↓'} ${Math.abs(pct)}% (${dif>0?'+':''}${fmt(dif)})</span>`;
+}
+function genericSubstituteHtml(producto){
+  if(!document.getElementById('genericSubstitutesToggle')?.checked) return '';
+  const category=productCategory(producto), current=latestPricesGrouped(producto).mismo[0];
+  if(!current) return '';
+  const candidates=allCanonicalProducts().map(([,name])=>name).filter(name=>resolveProductKey(name)!==resolveProductKey(producto) && productCategory(name)===category).map(name=>({name,price:latestPricesGrouped(name).mismo[0]})).filter(x=>x.price&&x.price.medida===current.medida&&x.price.precio<current.precio).sort((a,b)=>a.price.precio-b.price.precio);
+  if(!candidates.length) return '';
+  const best=candidates[0], saving=Math.round((1-best.price.precio/current.precio)*100);
+  return `<div class="recommendation-alt"><div class="recommendation-alt-label">Sustituto genérico opcional: ${esc(best.name)} · ${fmt(best.price.precio)}/${best.price.medida} en ${esc(best.price.comercio)} (${saving}% menos)</div></div>`;
 }
 function productRecommendationHtml(producto){
   const {mismo,alternativa}=latestPricesGrouped(producto);
@@ -1526,8 +1574,8 @@ function productRecommendationHtml(producto){
     const best=mismo[0], others=mismo.slice(1);
     const latestDate=new Date(best.fecha+'T12:00:00').toLocaleDateString('es-AR');
     const extra=others.length ? ` · Ahorro frente a ${esc(others[0].comercio)}: ${fmt(others[0].precio-best.precio)}` : '';
-    const chips=mismo.map((p,index)=>`<span class="price-history-chip${index===0?' best':''}">${esc(p.comercio)}: ${fmt(p.precio)}</span>`).join('');
-    html+=`<div class="recommendation-main">Recomprar en ${esc(best.comercio)} · ${fmt(best.precio)}</div><div class="recommendation-detail">Último precio: ${latestDate}${extra}</div><div class="price-history">${chips}</div>`;
+    const chips=mismo.map((p,index)=>`<span class="price-history-chip${index===0?' best':''}">${esc(p.comercio)}: ${fmt(p.precio)}/${p.medida} ${staleHtml(p.fecha)}</span>`).join('');
+    html+=`<div class="recommendation-main">Recomprar en ${esc(best.comercio)} · ${fmt(best.precio)}/${best.medida} ${staleHtml(best.fecha)}</div><div class="recommendation-detail">Último precio: ${latestDate}${extra} · ${trendHtml(producto,best.comercio)}</div><div class="price-history">${chips}</div>`;
   }else{
     html+='<div class="comparison-new">Sin precio de este producto exacto todavía</div>';
   }
@@ -1536,6 +1584,7 @@ function productRecommendationHtml(producto){
     const chipsAlt=alternativa.map((p,index)=>`<span class="price-history-chip alt${index===0?' best':''}">${esc(p.comercio)}: ${fmt(p.precio)}</span>`).join('');
     html+=`<div class="recommendation-alt"><div class="recommendation-alt-label">Alternativas de otra marca · desde ${fmt(bestAlt.precio)} en ${esc(bestAlt.comercio)}</div><div class="price-history">${chipsAlt}</div></div>`;
   }
+  html+=genericSubstituteHtml(producto);
   html+='</div>';
   return html;
 }
@@ -1627,7 +1676,7 @@ function toggleTicketExpand(id){ expandedTicketId = expandedTicketId===id ? null
 
 function saveTicket(){
   const fecha=document.getElementById('ticketDate').value, comercio=document.getElementById('ticketStore').value.trim()||'Supermercado', medio=document.getElementById('ticketPayment').value.trim()||'Sin especificar', fuente=document.getElementById('ticketSource').value.trim()||'Lucía y Juan', numero=document.getElementById('ticketNumber').value.trim();
-  const items=ticketDraft.map(r=>({producto:r.producto.trim(),cantidad:numInput(r.cantidad),unidad:r.unidad.trim()||'un',precioUnitario:moneyInput(r.precioUnitario),total:moneyInput(r.total)||Math.round(numInput(r.cantidad)*moneyInput(r.precioUnitario)),imagen:String(r.imagen||'').trim()})).filter(r=>r.producto&&r.total>0);
+  const items=ticketDraft.map(r=>({producto:r.producto.trim(),cantidad:numInput(r.cantidad),unidad:r.unidad.trim()||'un',precioUnitario:moneyInput(r.precioUnitario),total:moneyInput(r.total)||Math.round(numInput(r.cantidad)*moneyInput(r.precioUnitario)),descuento:moneyInput(r.descuento),precioLista:moneyInput(r.precioLista)||((moneyInput(r.total)||0)+moneyInput(r.descuento)),imagen:String(r.imagen||'').trim()})).filter(r=>r.producto&&r.total>0);
   if(!fecha){ alert('Indicá la fecha de la compra.'); return; }
   if(!items.length){ alert('Cargá al menos un producto con su total.'); return; }
   items.forEach(item=>{ if(item.imagen) setProductImage(item.producto, item.imagen); });
@@ -1658,6 +1707,7 @@ function hashStr(s){ let h=0; for(let i=0;i<s.length;i++){ h=(h*31+s.charCodeAt(
 function getStoreColor(name){ const key = String(name||'').trim().toLowerCase(); if(!key) return '#9096a1'; return STORE_PALETTE[hashStr(key)%STORE_PALETTE.length]; }
 
 function renderSupermercadoTab(){
+  const staleInput=document.getElementById('staleDaysInput'); if(staleInput) staleInput.value=MARKET_STALE_DAYS;
   const total = SUPERMERCADO.reduce((s,t)=>s+t.items.reduce((s2,i)=>s2+Number(i.total||0),0),0);
   const itemsCount = SUPERMERCADO.reduce((s,t)=>s+t.items.length,0);
   document.getElementById('marketTicketsCount').textContent = SUPERMERCADO.length;
@@ -1733,11 +1783,11 @@ function buildProductCatalog(storeFilter='all'){
     (t.items||[]).forEach(i=>{
       const key = resolveProductKey(i.producto);
       if(!key) return;
-      const unit = Number(i.precioUnitario) || ((Number(i.total)||0)/(Number(i.cantidad)||1));
+      const unit = unitPriceOf(i);
       if(!unit) return;
       if(!map[key] || dateKey(t.fecha) > dateKey(map[key].fecha) || (dateKey(t.fecha)===dateKey(map[key].fecha) && Number(t.orden||0)>Number(map[key].orden||0))){
         const canonicalProduct=allCanonicalProducts().find(([canonicalKey])=>canonicalKey===key)?.[1]||i.producto;
-        map[key] = { producto: canonicalProduct, categoria:i.categoria||productCategory(i.producto), unit, fecha: t.fecha, comercio: t.comercio, ticketId: t.id, orden:t.orden||0 };
+        map[key] = { producto: canonicalProduct, categoria:i.categoria||productCategory(i.producto), unit, unitLabel:unitPriceLabel(i), fecha: t.fecha, comercio: t.comercio, ticketId: t.id, orden:t.orden||0 };
       }
     });
   });
@@ -1770,11 +1820,33 @@ function renderProductCatalog(){
   catalog.forEach(c=>{ const category=c.categoria||productCategory(c.producto); (groups[category]||(groups[category]=[])).push(c); });
   const categories=Object.keys(groups).sort((a,b)=>{ const ai=CATEGORY_ORDER.indexOf(a), bi=CATEGORY_ORDER.indexOf(b); return (ai<0?999:ai)-(bi<0?999:bi) || a.localeCompare(b,'es'); });
   wrap.innerHTML=categories.map(category=>{
-    const rows=groups[category].map(c=>`<tr><td>${catalogImageControlHtml(c.producto)}</td><td>${productNameCellHtml(c.producto)}</td><td class="monto">${fmt(c.unit)}</td><td>${new Date(c.fecha+'T12:00:00').toLocaleDateString('es-AR')} · ${esc(c.comercio)}</td><td>${comparisonHtml(c.producto, c.unit, c.ticketId, c.comercio)}</td><td>${productRecommendationHtml(c.producto)}</td></tr>`).join('');
-    const mobileCards=groups[category].map(c=>`<article class="catalog-mobile-card"><div class="catalog-mobile-top">${catalogImageControlHtml(c.producto,62)}<div class="catalog-mobile-identity">${productNameCellHtml(c.producto)}<div class="catalog-mobile-grid"><div class="catalog-mobile-stat"><span>Último precio</span><strong class="catalog-mobile-price">${fmt(c.unit)}</strong></div><div class="catalog-mobile-stat"><span>Variación aquí</span>${comparisonHtml(c.producto,c.unit,c.ticketId,c.comercio)}</div></div><div class="catalog-mobile-meta">Última compra: ${new Date(c.fecha+'T12:00:00').toLocaleDateString('es-AR')} · ${esc(c.comercio)}</div><div class="catalog-mobile-recommendation"><span>Recomendación de recompra</span>${productRecommendationHtml(c.producto)}</div></div></div></article>`).join('');
+    const rows=groups[category].map(c=>`<tr><td>${catalogImageControlHtml(c.producto)}</td><td>${productNameCellHtml(c.producto)}</td><td class="monto">${c.unitLabel}</td><td>${new Date(c.fecha+'T12:00:00').toLocaleDateString('es-AR')} · ${esc(c.comercio)} ${staleHtml(c.fecha)}</td><td>${comparisonHtml(c.producto, c.unit, c.ticketId, c.comercio)}<br>${trendHtml(c.producto,c.comercio)}</td><td>${productRecommendationHtml(c.producto)}</td></tr>`).join('');
+    const mobileCards=groups[category].map(c=>`<article class="catalog-mobile-card"><div class="catalog-mobile-top">${catalogImageControlHtml(c.producto,62)}<div class="catalog-mobile-identity">${productNameCellHtml(c.producto)}<div class="catalog-mobile-grid"><div class="catalog-mobile-stat"><span>Último precio</span><strong class="catalog-mobile-price">${c.unitLabel}</strong></div><div class="catalog-mobile-stat"><span>Variación aquí</span>${comparisonHtml(c.producto,c.unit,c.ticketId,c.comercio)} ${trendHtml(c.producto,c.comercio)}</div></div><div class="catalog-mobile-meta">Última compra: ${new Date(c.fecha+'T12:00:00').toLocaleDateString('es-AR')} · ${esc(c.comercio)} ${staleHtml(c.fecha)}</div><div class="catalog-mobile-recommendation"><span>Recomendación de recompra</span>${productRecommendationHtml(c.producto)}</div></div></div></article>`).join('');
     const count=groups[category].length;
     return `<section class="catalog-category"><div class="catalog-category-title"><span>${esc(category)}</span><span>${count} producto${count===1?'':'s'}</span></div><table class="catalog-desktop-table"><thead><tr><th>Imagen</th><th>Producto</th><th>Último precio</th><th>Última compra</th><th>Vs. compra anterior aquí</th><th>Recomendación de recompra</th></tr></thead><tbody>${rows}</tbody></table><div class="catalog-mobile-list">${mobileCards}</div></section>`;
   }).join('');
+}
+
+function findShoppingProduct(text){
+  const query=cleanProduct(text);
+  return allCanonicalProducts().map(([,name])=>name).find(name=>cleanProduct(name)===query) || allCanonicalProducts().map(([,name])=>name).find(name=>cleanProduct(name).includes(query)||query.includes(cleanProduct(name))) || '';
+}
+function optimizeShoppingList(){
+  const output=document.getElementById('shoppingOptimizerResult');
+  const lines=(document.getElementById('shoppingListInput').value||'').split(/\n|,/).map(x=>x.trim()).filter(Boolean);
+  const trip=Math.max(0,moneyInput(document.getElementById('extraTripCost').value));
+  if(!lines.length){ output.innerHTML='<span class="comparison-new">Ingresá al menos un producto.</span>'; return; }
+  const entries=lines.map(line=>{ const product=findShoppingProduct(line); const prices=product?latestPricesGrouped(product).mismo.filter(p=>ageInDays(p.fecha)<=MARKET_STALE_DAYS):[]; return {line,product,prices}; });
+  const unresolved=entries.filter(e=>!e.prices.length);
+  const usable=entries.filter(e=>e.prices.length);
+  if(!usable.length){ output.innerHTML='<span class="comparison-new">No hay precios vigentes para los productos de la lista.</span>'; return; }
+  const totals={}; usable.forEach(e=>e.prices.forEach(p=>{ totals[p.comercio]=(totals[p.comercio]||0)+p.precio; }));
+  const allStore=Object.entries(totals).sort((a,b)=>a[1]-b[1])[0];
+  const picks=usable.map(e=>({product:e.product,price:e.prices[0]}));
+  const splitRaw=picks.reduce((sum,p)=>sum+p.price.precio,0), splitStores=[...new Set(picks.map(p=>p.price.comercio))], splitTotal=splitRaw+(splitStores.length>1?trip:0);
+  const saving=allStore?allStore[1]-splitTotal:0;
+  const linesHtml=picks.map(p=>`<li>${esc(p.product)}: <strong>${esc(p.price.comercio)}</strong> · ${fmt(p.price.precio)}/${p.price.medida}</li>`).join('');
+  output.innerHTML=`<div>Todo en <strong>${esc(allStore[0])}</strong>: ${fmt(allStore[1])} para los ítems con precio disponible.</div><div>Compra dividida (${esc(splitStores.join(' + '))}): <strong>${fmt(splitTotal)}</strong>${splitStores.length>1?` · incluye ${fmt(trip)} de viaje extra`:''}.</div><div>${saving>0?`<strong>Conviene dividir: ahorro neto ${fmt(saving)}.</strong>`:saving<0?`Conviene comprar todo en ${esc(allStore[0])}: dividir cuesta ${fmt(-saving)} más.`:'El costo es igual.'}</div><ul>${linesHtml}</ul>${unresolved.length?`<div class="stale-warning">Sin precio vigente: ${unresolved.map(x=>esc(x.line)).join(', ')}</div>`:''}`;
 }
 
 function renderComprasList(){
@@ -1822,11 +1894,11 @@ function renderComprasList(){
 function renderCompraDetail(t){
   let rows='';
   t.items.forEach(i=>{
-    const unit = Number(i.precioUnitario) || ((Number(i.total)||0)/(Number(i.cantidad)||1));
-    rows += `<tr><td style="display:flex;align-items:center;gap:10px;">${productThumbHtml(i.producto,48)}${productNameCellHtml(i.producto)}</td><td>${i.cantidad} ${esc(i.unidad)}</td><td class="monto">${fmt(unit)}</td><td class="monto">${fmt(i.total)}</td><td>${comparisonHtml(i.producto,unit,t.id,t.comercio)}</td></tr>`;
+    const unit = unitPriceOf(i);
+    rows += `<tr><td style="display:flex;align-items:center;gap:10px;">${productThumbHtml(i.producto,48)}${productNameCellHtml(i.producto)}</td><td>${i.cantidad} ${esc(i.unidad)}</td><td class="monto">${unitPriceLabel(i)}</td><td class="monto">${fmt(i.total)}${Number(i.descuento)?`<span class="discount-note">Descuento aplicado: -${fmt(i.descuento)}${Number(i.precioLista)?` · Lista: ${fmt(i.precioLista)}`:''}</span>`:''}</td><td>${comparisonHtml(i.producto,unit,t.id,t.comercio)}<br>${trendHtml(i.producto,t.comercio)}</td></tr>`;
   });
   return `<div class="compra-detail">
-    <table><thead><tr><th>Producto</th><th>Cant.</th><th>Precio unit.</th><th>Importe</th><th>Vs. compra anterior</th></tr></thead><tbody>${rows}</tbody></table>
+    <table><thead><tr><th>Producto</th><th>Cant.</th><th>Precio por medida</th><th>Importe final</th><th>Variación y tendencia</th></tr></thead><tbody>${rows}</tbody></table>
     <div class="compra-actions">
       <button class="btn" type="button" onclick="startEditTicket('${t.id}')">✎ Editar compra</button>
       <button class="btn danger" type="button" onclick="deleteTicket('${t.id}')">🗑 Eliminar compra</button>
